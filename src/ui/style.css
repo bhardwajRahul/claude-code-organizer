@@ -57,7 +57,7 @@ body {
 .expand-toggle:hover { background:var(--hover); border-color:var(--scope-border); }
 .toggle-icon { display:inline-block; width:0; height:0; border-top:4px solid transparent; border-bottom:4px solid transparent; border-left:6px solid var(--text-muted); transition:transform 0.15s; }
 .toggle-icon.expanded { transform:rotate(90deg); }
-.search { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:7px 14px; color:var(--text-primary); font-size:0.78rem; width:200px; font-family:inherit; outline:none; transition:all 0.15s; }
+.search { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:7px 14px; color:var(--text-primary); font-size:0.78rem; width:260px; font-family:inherit; outline:none; transition:all 0.15s; }
 .search:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-light); }
 .search::placeholder { color:var(--text-faint); }
 .pills { display:flex; gap:4px; flex-wrap:wrap; }
