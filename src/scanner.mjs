@@ -8,10 +8,16 @@
 
 import { readdir, stat, readFile, access } from "node:fs/promises";
 import { join, relative, basename, extname } from "node:path";
-import { homedir } from "node:os";
+import { homedir, platform } from "node:os";
 
 const HOME = homedir();
 const CLAUDE_DIR = join(HOME, ".claude");
+
+// Platform-aware managed config directory
+// Linux: /etc/claude-code/  macOS: /Library/Application Support/ClaudeCode/
+const MANAGED_DIR = platform() === "darwin"
+  ? "/Library/Application Support/ClaudeCode"
+  : "/etc/claude-code";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -43,6 +49,22 @@ function parseFrontmatter(content) {
     if (m) fm[m[1]] = m[2].trim();
   }
   return fm;
+}
+
+// ── Settings overrides cache ─────────────────────────────────────────
+
+let _settingsCache = null;
+
+/** Read merged user settings (settings.json + settings.local.json) once. */
+async function getSettingsOverrides() {
+  if (_settingsCache) return _settingsCache;
+  _settingsCache = {};
+  for (const f of ["settings.json", "settings.local.json"]) {
+    const content = await safeReadFile(join(CLAUDE_DIR, f));
+    if (!content) continue;
+    try { Object.assign(_settingsCache, JSON.parse(content)); } catch {}
+  }
+  return _settingsCache;
 }
 
 // ── Path decoding ────────────────────────────────────────────────────
@@ -217,9 +239,16 @@ async function loadSkillBundles(repoDir) {
 
 async function scanMemories(scope) {
   const items = [];
-  const memDir = scope.id === "global"
-    ? join(CLAUDE_DIR, "memory")
-    : join(scope.claudeProjectDir, "memory");
+  const settings = await getSettingsOverrides();
+  const customMemDir = settings.autoMemoryDirectory;
+  let memDir;
+  if (scope.id === "global") {
+    memDir = join(CLAUDE_DIR, "memory");
+  } else if (customMemDir) {
+    memDir = join(scope.repoDir || process.cwd(), customMemDir);
+  } else {
+    memDir = join(scope.claudeProjectDir, "memory");
+  }
 
   if (!(await exists(memDir))) return items;
 
@@ -253,9 +282,11 @@ async function scanSkills(scope) {
   let skillDirs = [];
 
   if (scope.id === "global") {
-    // Global skills: ~/.claude/skills/
+    // Global skills: ~/.claude/skills/ + managed
     const dir = join(CLAUDE_DIR, "skills");
     if (await exists(dir)) skillDirs.push(dir);
+    const managedSkills = join(MANAGED_DIR, ".claude", "skills");
+    if (await exists(managedSkills)) skillDirs.push(managedSkills);
   } else if (scope.repoDir) {
     // Per-repo skills: repo/.claude/skills/
     const dir = join(scope.repoDir, ".claude", "skills");
@@ -345,7 +376,7 @@ async function scanMcpServers(scope) {
     // 4. mcpServers inside settings.json / settings.local.json
     mcpPaths.push({ path: join(CLAUDE_DIR, ".mcp.json"), label: "global" });
     mcpPaths.push({ path: join(HOME, ".mcp.json"), label: "global" });
-    mcpPaths.push({ path: "/etc/claude-code/managed-mcp.json", label: "managed" });
+    mcpPaths.push({ path: join(MANAGED_DIR, "managed-mcp.json"), label: "managed" });
   } else if (scope.repoDir) {
     // Project-scope MCP: repo/.mcp.json
     const repoMcp = join(scope.repoDir, ".mcp.json");
@@ -427,6 +458,8 @@ async function scanConfigs(scope) {
     { name: "CLAUDE.md", path: join(CLAUDE_DIR, "CLAUDE.md"), desc: "Global instructions" },
     { name: "settings.json", path: join(CLAUDE_DIR, "settings.json"), desc: "Global settings" },
     { name: "settings.local.json", path: join(CLAUDE_DIR, "settings.local.json"), desc: "Local settings override" },
+    { name: "CLAUDE.md (managed)", path: join(MANAGED_DIR, "CLAUDE.md"), desc: "Enterprise managed instructions" },
+    { name: "managed-settings.json", path: join(MANAGED_DIR, "managed-settings.json"), desc: "Enterprise managed settings" },
   ];
 
   for (const cfg of configs) {
@@ -452,34 +485,42 @@ async function scanConfigs(scope) {
 
 async function scanHooks(scope) {
   const items = [];
-  if (scope.id !== "global") return items; // hooks in global settings for now
+  if (scope.id !== "global") return items;
 
-  const content = await safeReadFile(join(CLAUDE_DIR, "settings.json"));
-  if (!content) return items;
+  // Scan all settings sources for hooks (user, local, managed)
+  const hookSources = [
+    { path: join(CLAUDE_DIR, "settings.json"), label: "settings.json" },
+    { path: join(CLAUDE_DIR, "settings.local.json"), label: "settings.local.json" },
+    { path: join(MANAGED_DIR, "managed-settings.json"), label: "managed-settings.json" },
+  ];
 
-  try {
-    const settings = JSON.parse(content);
-    const hooks = settings.hooks || {};
-    for (const [event, hookArray] of Object.entries(hooks)) {
-      for (const hookGroup of hookArray) {
-        const cmds = hookGroup.hooks || [];
-        for (const cmd of cmds) {
-          items.push({
-            category: "hook",
-            scopeId: scope.id,
-            name: event,
-            fileName: "settings.json",
-            description: cmd.command || cmd.prompt || "",
-            subType: cmd.type || "command",
-            size: "",
-            sizeBytes: 0,
-            mtime: "",
-            path: join(CLAUDE_DIR, "settings.json"),
-          });
+  for (const source of hookSources) {
+    const content = await safeReadFile(source.path);
+    if (!content) continue;
+    try {
+      const settings = JSON.parse(content);
+      const hooks = settings.hooks || {};
+      for (const [event, hookArray] of Object.entries(hooks)) {
+        for (const hookGroup of hookArray) {
+          const cmds = hookGroup.hooks || [];
+          for (const cmd of cmds) {
+            items.push({
+              category: "hook",
+              scopeId: scope.id,
+              name: event,
+              fileName: source.label,
+              description: cmd.command || cmd.prompt || "",
+              subType: cmd.type || "command",
+              size: "",
+              sizeBytes: 0,
+              mtime: "",
+              path: source.path,
+            });
+          }
         }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
   return items;
 }
@@ -522,7 +563,10 @@ async function scanPlugins() {
 
 async function scanPlans() {
   const items = [];
-  const plansDir = join(CLAUDE_DIR, "plans");
+  const settings = await getSettingsOverrides();
+  const plansDir = settings.plansDirectory
+    ? join(process.cwd(), settings.plansDirectory)
+    : join(CLAUDE_DIR, "plans");
   if (!(await exists(plansDir))) return items;
 
   const files = await readdir(plansDir);
@@ -568,6 +612,7 @@ async function scanPlans() {
  * }
  */
 export async function scan() {
+  _settingsCache = null; // reset cache each scan
   const scopes = await discoverScopes();
   const allItems = [];
 
