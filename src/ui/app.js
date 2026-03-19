@@ -17,6 +17,7 @@ let pendingDrag = null;  // { item, fromScopeId, toScopeId, revertFn }
 let pendingDelete = null; // item to delete
 let draggingItem = null; // item currently being dragged
 let expandState = { scopes: new Set(), cats: new Set() }; // track expanded sections
+let bulkSelected = new Set(); // paths of selected items for bulk ops
 
 // ── Category config ──────────────────────────────────────────────────
 
@@ -47,6 +48,7 @@ async function init() {
   setupSearch();
   setupDetailPanel();
   setupModals();
+  setupBulkBar();
   setupScopeDropZones();
 }
 
@@ -220,6 +222,9 @@ function renderItem(item) {
   const icon = ITEM_ICONS[item.category] || "📄";
   const locked = item.locked ? " locked" : "";
   const badgeClass = `b-${item.subType || item.category}`;
+  const checked = bulkSelected.has(item.path) ? " checked" : "";
+
+  const checkbox = item.locked ? "" : `<input type="checkbox" class="row-chk" data-path="${esc(item.path)}"${checked}>`;
 
   const actions = item.locked ? "" : `
     <span class="row-acts">
@@ -230,6 +235,7 @@ function renderItem(item) {
 
   return `
     <div class="item-row${locked}" data-path="${esc(item.path)}" data-category="${item.category}">
+      ${checkbox}
       <span class="row-ico">${icon}</span>
       <span class="row-name">${esc(item.name)}</span>
       <span class="row-badge ${badgeClass}">${esc(item.subType || item.category)}</span>
@@ -406,6 +412,136 @@ function initSortable() {
       }
     });
   });
+
+  // Checkbox handlers for bulk select
+  document.querySelectorAll(".row-chk").forEach(chk => {
+    chk.addEventListener("change", (e) => {
+      e.stopPropagation();
+      const path = chk.dataset.path;
+      if (chk.checked) bulkSelected.add(path);
+      else bulkSelected.delete(path);
+      updateBulkBar();
+    });
+    chk.addEventListener("click", (e) => e.stopPropagation());
+  });
+}
+
+// ── Bulk operations ─────────────────────────────────────────────────
+
+function updateBulkBar() {
+  const bar = document.getElementById("bulkBar");
+  if (bulkSelected.size === 0) {
+    bar.classList.add("hidden");
+    return;
+  }
+  bar.classList.remove("hidden");
+  document.getElementById("bulkCount").textContent = `${bulkSelected.size} selected`;
+}
+
+function setupBulkBar() {
+  document.getElementById("bulkClear").addEventListener("click", () => {
+    bulkSelected.clear();
+    document.querySelectorAll(".row-chk").forEach(c => c.checked = false);
+    updateBulkBar();
+  });
+
+  document.getElementById("bulkDelete").addEventListener("click", async () => {
+    if (bulkSelected.size === 0) return;
+    const count = bulkSelected.size;
+    const paths = [...bulkSelected];
+
+    // Confirm
+    if (!confirm(`Delete ${count} item(s)? This cannot be undone.`)) return;
+
+    let ok = 0, fail = 0;
+    for (const p of paths) {
+      const result = await doDelete(p, true); // true = skip refresh
+      if (result.ok) ok++;
+      else fail++;
+    }
+
+    bulkSelected.clear();
+    await refreshUI();
+    toast(`Deleted ${ok} item(s)${fail ? `, ${fail} failed` : ""}`);
+  });
+
+  document.getElementById("bulkMove").addEventListener("click", async () => {
+    if (bulkSelected.size === 0) return;
+    const paths = [...bulkSelected];
+
+    // All selected items must be same category for move
+    const items = paths.map(p => data.items.find(i => i.path === p)).filter(Boolean);
+    const categories = new Set(items.map(i => i.category));
+    if (categories.size > 1) {
+      return toast("Cannot bulk-move items of different types", true);
+    }
+
+    // Use first item to get destinations, then move all
+    openBulkMoveModal(items);
+  });
+}
+
+async function openBulkMoveModal(items) {
+  const first = items[0];
+  const res = await fetchJson(`/api/destinations?path=${encodeURIComponent(first.path)}`);
+  if (!res.ok) return toast(res.error, true);
+
+  const listEl = document.getElementById("moveDestList");
+  const allScopeMap = {};
+  for (const s of data.scopes) allScopeMap[s.id] = s;
+  for (const s of res.destinations) allScopeMap[s.id] = s;
+
+  function getDepth(scope) {
+    let depth = 0, cur = scope;
+    while (cur.parentId) { depth++; cur = allScopeMap[cur.parentId] || { parentId: null }; }
+    return depth;
+  }
+
+  const ordered = [];
+  function addWithChildren(parentId) {
+    for (const s of res.destinations) {
+      if ((s.parentId || null) === parentId) { ordered.push(s); addWithChildren(s.id); }
+    }
+  }
+  addWithChildren(null);
+
+  listEl.innerHTML = ordered.map(scope => {
+    const depth = getDepth(scope);
+    const indentPx = depth > 0 ? ` style="padding-left:${depth * 28}px"` : "";
+    const icon = scope.id === "global" ? "🌐" : (SCOPE_ICONS[scope.type] || "📂");
+    return `<div class="dest" data-scope-id="${esc(scope.id)}"${indentPx}>
+      <span class="di">${icon}</span>
+      <span class="dn">${esc(scope.name)}</span>
+      <span class="dp">${esc(scope.tag)}</span>
+    </div>`;
+  }).join("");
+
+  let selectedDest = null;
+  listEl.querySelectorAll(".dest").forEach(d => {
+    d.addEventListener("click", () => {
+      listEl.querySelectorAll(".dest").forEach(x => x.classList.remove("sel"));
+      d.classList.add("sel");
+      selectedDest = d.dataset.scopeId;
+      document.getElementById("moveConfirm").disabled = false;
+    });
+  });
+
+  document.getElementById("moveConfirm").disabled = true;
+  document.getElementById("moveConfirm").onclick = async () => {
+    if (!selectedDest) return;
+    closeMoveModal();
+    let ok = 0, fail = 0;
+    for (const item of items) {
+      const result = await doMove(item.path, selectedDest, true); // true = skip refresh
+      if (result.ok) ok++;
+      else fail++;
+    }
+    bulkSelected.clear();
+    await refreshUI();
+    toast(`Moved ${ok} item(s)${fail ? `, ${fail} failed` : ""}`);
+  };
+
+  document.getElementById("moveModal").classList.remove("hidden");
 }
 
 // ── Scope card drop zones (document-level, bypass SortableJS) ────────
@@ -512,6 +648,49 @@ function showDetail(item, rowEl) {
   // Highlight row
   document.querySelectorAll(".item-row.selected").forEach(r => r.classList.remove("selected"));
   if (rowEl) rowEl.classList.add("selected");
+
+  // Load preview
+  loadPreview(item);
+}
+
+async function loadPreview(item) {
+  const el = document.getElementById("previewContent");
+  el.textContent = "Loading...";
+
+  try {
+    // MCP: show config directly from item data
+    if (item.category === "mcp") {
+      el.textContent = JSON.stringify(item.mcpConfig || {}, null, 2);
+      return;
+    }
+
+    // Hook: show command/prompt inline
+    if (item.category === "hook") {
+      el.textContent = item.description || "(no content)";
+      return;
+    }
+
+    // Plugin: directory, no single file to preview
+    if (item.category === "plugin") {
+      el.textContent = `Plugin directory: ${item.path}`;
+      return;
+    }
+
+    // Skill: read SKILL.md inside the directory
+    let filePath = item.path;
+    if (item.category === "skill") {
+      filePath = item.path + "/SKILL.md";
+    }
+
+    const res = await fetchJson(`/api/file-content?path=${encodeURIComponent(filePath)}`);
+    if (res.ok) {
+      el.textContent = res.content;
+    } else {
+      el.textContent = res.error || "Cannot load preview";
+    }
+  } catch {
+    el.textContent = "Failed to load preview";
+  }
 }
 
 function closeDetail() {
@@ -723,7 +902,11 @@ async function refreshUI() {
   closeDetail();
 }
 
-async function doMove(itemPath, toScopeId) {
+async function doMove(itemPath, toScopeId, skipRefresh = false) {
+  // Find item before move for undo info
+  const item = data.items.find(i => i.path === itemPath);
+  const fromScopeId = item?.scopeId;
+
   const response = await fetch("/api/move", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -731,17 +914,47 @@ async function doMove(itemPath, toScopeId) {
   });
   const result = await response.json();
 
-  if (result.ok) {
-    toast(result.message);
-    await refreshUI();
-  } else {
-    toast(result.error, true);
+  if (!skipRefresh) {
+    if (result.ok) {
+      const undoFn = async () => {
+        // Move back: result.to is the new path, fromScopeId is where it came from
+        const undoResult = await fetch("/api/move", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itemPath: result.to, toScopeId: fromScopeId }),
+        }).then(r => r.json());
+        if (undoResult.ok) { toast("Move undone"); await refreshUI(); }
+        else toast(undoResult.error, true);
+      };
+      toast(result.message, false, undoFn);
+      await refreshUI();
+    } else {
+      toast(result.error, true);
+    }
   }
 
   return result;
 }
 
-async function doDelete(itemPath) {
+async function doDelete(itemPath, skipRefresh = false) {
+  // Backup content before delete for undo
+  const item = data.items.find(i => i.path === itemPath);
+  let backupContent = null;
+  let mcpBackup = null;
+  if (item) {
+    try {
+      if (item.category === "mcp") {
+        // MCP: backup the server config from item data
+        mcpBackup = { name: item.name, config: item.mcpConfig, mcpJsonPath: item.path };
+      } else {
+        let readPath = item.path;
+        if (item.category === "skill") readPath = item.path + "/SKILL.md";
+        const backup = await fetchJson(`/api/file-content?path=${encodeURIComponent(readPath)}`);
+        if (backup.ok) backupContent = backup.content;
+      }
+    } catch { /* best effort */ }
+  }
+
   const response = await fetch("/api/delete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -749,23 +962,67 @@ async function doDelete(itemPath) {
   });
   const result = await response.json();
 
-  if (result.ok) {
-    toast(result.message);
-    await refreshUI();
-  } else {
-    toast(result.error, true);
+  if (!skipRefresh) {
+    if (result.ok) {
+      let undoFn = null;
+      if (mcpBackup) {
+        // MCP undo: re-add the server entry to .mcp.json
+        undoFn = async () => {
+          const restoreResult = await fetch("/api/restore-mcp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(mcpBackup),
+          }).then(r => r.json());
+          if (restoreResult.ok) { toast("Delete undone"); await refreshUI(); }
+          else toast(restoreResult.error, true);
+        };
+      } else if (backupContent) {
+        undoFn = async () => {
+          const restoreResult = await fetch("/api/restore", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              filePath: item.path,
+              content: backupContent,
+              isDir: item.category === "skill",
+            }),
+          }).then(r => r.json());
+          if (restoreResult.ok) { toast("Delete undone"); await refreshUI(); }
+          else toast(restoreResult.error, true);
+        };
+      }
+      toast(result.message, false, undoFn);
+      await refreshUI();
+    } else {
+      toast(result.error, true);
+    }
   }
 
   return result;
 }
 
-// ── Toast ────────────────────────────────────────────────────────────
+// ── Toast with optional Undo ─────────────────────────────────────────
 
-function toast(msg, isError = false) {
+let toastTimer = null;
+
+function toast(msg, isError = false, undoFn = null) {
   const el = document.getElementById("toast");
-  document.getElementById("toastMsg").textContent = msg;
-  el.className = isError ? "toast error" : "toast";
-  setTimeout(() => el.classList.add("hidden"), 4000);
+  if (toastTimer) clearTimeout(toastTimer);
+
+  if (undoFn) {
+    document.getElementById("toastMsg").innerHTML =
+      `${esc(msg)} <button class="toast-undo" id="toastUndo">Undo</button>`;
+    el.className = "toast";
+    document.getElementById("toastUndo").onclick = async () => {
+      el.classList.add("hidden");
+      await undoFn();
+    };
+    toastTimer = setTimeout(() => el.classList.add("hidden"), 8000); // longer for undo
+  } else {
+    document.getElementById("toastMsg").textContent = msg;
+    el.className = isError ? "toast error" : "toast";
+    toastTimer = setTimeout(() => el.classList.add("hidden"), 4000);
+  }
 }
 
 // ── Start ────────────────────────────────────────────────────────────

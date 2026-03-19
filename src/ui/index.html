@@ -37,13 +37,19 @@
         <h2 id="detailTitle">—</h2>
         <button class="detail-x" id="detailClose">&times;</button>
       </div>
-      <div class="detail-bd">
+      <div class="detail-meta">
         <div class="df"><div class="dl">Type</div><div class="dv" id="detailType">—</div></div>
         <div class="df"><div class="dl">Scope</div><div class="dv" id="detailScope">—</div></div>
         <div class="df"><div class="dl">Description</div><div class="dv" id="detailDesc">—</div></div>
-        <div class="df"><div class="dl">Size</div><div class="dv" id="detailSize">—</div></div>
-        <div class="df"><div class="dl">Modified</div><div class="dv" id="detailDate">—</div></div>
+        <div class="df-row">
+          <div class="df"><div class="dl">Size</div><div class="dv" id="detailSize">—</div></div>
+          <div class="df"><div class="dl">Modified</div><div class="dv" id="detailDate">—</div></div>
+        </div>
         <div class="df"><div class="dl">Path</div><div class="dv" id="detailPath" style="font-size:0.65rem;word-break:break-all;">—</div></div>
+      </div>
+      <div class="detail-preview">
+        <div class="preview-hdr"><span class="preview-label">PREVIEW</span></div>
+        <pre class="preview-content" id="previewContent">Select an item to preview</pre>
       </div>
       <div class="detail-ft">
         <button class="btn btn-p" id="detailOpen">Open in Editor</button>
@@ -94,6 +100,14 @@
         <button class="btn btn-danger" id="deleteConfirm">Delete</button>
       </div>
     </div>
+  </div>
+
+  <!-- Bulk action bar -->
+  <div class="bulk-bar hidden" id="bulkBar">
+    <span class="bulk-count" id="bulkCount">0 selected</span>
+    <button class="btn btn-p btn-sm" id="bulkMove">Move all</button>
+    <button class="btn btn-danger btn-sm" id="bulkDelete">Delete all</button>
+    <button class="btn btn-s btn-sm" id="bulkClear">Clear</button>
   </div>
 
   <!-- Toast -->

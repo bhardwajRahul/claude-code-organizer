@@ -111,6 +111,55 @@ async function handleRequest(req, res) {
     return json(res, { ok: true, destinations, currentScopeId: item.scopeId });
   }
 
+  // POST /api/restore — restore a deleted file (for undo)
+  if (path === "/api/restore" && req.method === "POST") {
+    const { filePath, content, isDir } = await readBody(req);
+    if (!filePath || !filePath.startsWith("/")) {
+      return json(res, { ok: false, error: "Invalid path" }, 400);
+    }
+    try {
+      const { mkdir, writeFile: wf } = await import("node:fs/promises");
+      const { dirname } = await import("node:path");
+      await mkdir(dirname(filePath), { recursive: true });
+      if (isDir) {
+        // For skills: restore SKILL.md inside the directory
+        await mkdir(filePath, { recursive: true });
+        const skillPath = join(filePath, "SKILL.md");
+        await wf(skillPath, content, "utf-8");
+      } else {
+        await wf(filePath, content, "utf-8");
+      }
+      await freshScan();
+      return json(res, { ok: true, message: "Restored successfully" });
+    } catch (err) {
+      return json(res, { ok: false, error: `Restore failed: ${err.message}` }, 400);
+    }
+  }
+
+  // POST /api/restore-mcp — restore a deleted MCP server entry
+  if (path === "/api/restore-mcp" && req.method === "POST") {
+    const { name, config, mcpJsonPath } = await readBody(req);
+    if (!name || !config || !mcpJsonPath) {
+      return json(res, { ok: false, error: "Missing name, config, or mcpJsonPath" }, 400);
+    }
+    try {
+      let content = { mcpServers: {} };
+      try {
+        content = JSON.parse(await readFile(mcpJsonPath, "utf-8"));
+        if (!content.mcpServers) content.mcpServers = {};
+      } catch { /* file doesn't exist, start fresh */ }
+      content.mcpServers[name] = config;
+      const { writeFile: wf, mkdir: mk } = await import("node:fs/promises");
+      const { dirname } = await import("node:path");
+      await mk(dirname(mcpJsonPath), { recursive: true });
+      await wf(mcpJsonPath, JSON.stringify(content, null, 2) + "\n");
+      await freshScan();
+      return json(res, { ok: true, message: `Restored MCP server "${name}"` });
+    } catch (err) {
+      return json(res, { ok: false, error: `Restore failed: ${err.message}` }, 400);
+    }
+  }
+
   // GET /api/file-content?path=... — read file content for detail panel
   if (path === "/api/file-content" && req.method === "GET") {
     const filePath = url.searchParams.get("path");
