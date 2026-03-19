@@ -213,7 +213,7 @@ export function startServer(port = 3847, maxRetries = 10) {
   let attempt = 0;
   function tryListen(p) {
     server.listen(p, () => {
-      console.log(`Claude Inventory running at http://localhost:${p}`);
+      console.log(`Claude Code Organizer running at http://localhost:${p}`);
     });
   }
 

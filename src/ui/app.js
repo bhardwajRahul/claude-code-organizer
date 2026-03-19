@@ -50,6 +50,7 @@ async function init() {
   setupModals();
   setupBulkBar();
   setupScopeDropZones();
+  setupExpandToggle();
 }
 
 async function fetchJson(url) {
@@ -598,6 +599,42 @@ function setupScopeDropZones() {
     draggingItem = null;
     document.querySelectorAll(".scope-block.drop-target").forEach(b => b.classList.remove("drop-target"));
   }, true); // capture phase
+}
+
+// ── Expand/Collapse toggle ───────────────────────────────────────────
+
+let allExpanded = false;
+
+function setupExpandToggle() {
+  const btn = document.getElementById("expandToggle");
+  btn.addEventListener("click", () => {
+    allExpanded = !allExpanded;
+    btn.textContent = allExpanded ? "▼ Collapse all" : "▶ Expand all";
+
+    document.querySelectorAll(".scope-hdr").forEach(hdr => {
+      const body = hdr.nextElementSibling;
+      const tog = hdr.querySelector(".scope-tog");
+      if (allExpanded) {
+        body?.classList.remove("c");
+        tog?.classList.remove("c");
+      } else {
+        body?.classList.add("c");
+        tog?.classList.add("c");
+      }
+    });
+
+    document.querySelectorAll(".cat-hdr").forEach(hdr => {
+      const body = hdr.nextElementSibling;
+      const tog = hdr.querySelector(".cat-tog");
+      if (allExpanded) {
+        body?.classList.remove("c");
+        tog?.classList.remove("c");
+      } else {
+        body?.classList.add("c");
+        tog?.classList.add("c");
+      }
+    });
+  });
 }
 
 // ── Search ───────────────────────────────────────────────────────────
