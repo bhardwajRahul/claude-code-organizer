@@ -169,8 +169,14 @@ The dashboard is backed by a REST API:
 
 MIT
 
+## More from @mcpware
+
+| Project | What it does | Install |
+|---------|---|---|
+| **[Pagecast](https://github.com/mcpware/pagecast)** | Record any browser page as GIF or video via MCP | `npx @mcpware/pagecast` |
+| **[UI Annotator](https://github.com/mcpware/ui-annotator-mcp)** | Hover any element to see its name — zero extensions, any browser | `npx @mcpware/ui-annotator` |
+| **[Instagram MCP](https://github.com/mcpware/instagram-mcp)** | 23 tools for the Instagram Graph API | `npx @mcpware/instagram-mcp` |
+
 ## Author
 
 [ithiria894](https://github.com/ithiria894) — Building tools for the Claude Code ecosystem.
-
-See also: [@mcpware/instagram-mcp](https://github.com/mcpware/instagram-mcp)
