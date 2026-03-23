@@ -14,23 +14,33 @@ English | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [�
 
 ## The Problem
 
-Ever asked Claude Code to "remember this", only to find it saved the memory to the wrong scope?
+Claude Code silently creates memories, skills, and MCP configs every time you work — and dumps them into whatever scope matches your current directory. A preference you wanted everywhere? Trapped in one project. A deploy skill that belongs to one repo? Leaked into global, contaminating every other project.
 
-You're inside a project folder, you tell Claude to remember a preference — and it saves it to that project's scope. Switch to another project, and Claude has no idea. That memory is trapped.
+**This isn't just messy — it hurts your AI's performance.** Every session, Claude loads all configs from the current scope plus everything inherited from parent scopes into your context window. Wrong-scope items = wasted tokens, polluted context, and lower accuracy. A Python pipeline skill sitting in global gets loaded into your React frontend session. Duplicate MCP entries initialize the same server twice. Stale memories contradict your current instructions.
 
-The reverse happens too — skills or memories sitting in global scope that really only apply to one repo, leaking into everything else.
+### "Just ask Claude to fix it"
 
-Want to fix it? You'd have to manually dig through `~/.claude/` and its encoded-path folders (`-home-user-projects-my-app/`), find the right file, and move it yourself.
+You could ask Claude Code to manage its own config. But you'll go back and forth — `ls` one directory, `cat` each file, try to piece together the full picture from fragments of text output. **There's no command that shows the entire tree** across all scopes, all items, all inheritance at once.
 
-**Claude Code Organizer fixes this.**
+### The fix: a visual dashboard
+
+```bash
+npx @mcpware/claude-code-organizer
+```
+
+One command. See everything Claude has stored — organized by scope hierarchy. **Drag items between scopes.** Delete stale memories. Find duplicates. Take control of what actually influences Claude's behavior.
 
 ### Example: Project → Global
 
-You told Claude to remember "I prefer TypeScript + ESM" while inside a project, but that preference applies everywhere. Open the dashboard, drag that memory from Project scope to Global scope. Done.
+You told Claude "I prefer TypeScript + ESM" while inside a project, but that preference applies everywhere. Open the dashboard, drag that memory from Project to Global. **Done. One drag.**
 
 ### Example: Global → Project
 
-You have a deploy skill sitting in global, but it only makes sense for one repo. Drag it into that Project scope — other projects won't see it anymore.
+A deploy skill sitting in global only makes sense for one repo. Drag it into that Project scope — other projects won't see it anymore.
+
+### Example: Delete stale memories
+
+Claude auto-creates memories from things you said casually, or things it *thought* you wanted remembered. A week later they're irrelevant but still loaded into every session. Browse, read, delete. **You control what Claude thinks it knows about you.**
 
 ---
 
@@ -47,18 +57,16 @@ You have a deploy skill sitting in global, but it only makes sense for one repo.
 
 ## Why a Visual Dashboard?
 
-Claude Code can already list and move files via CLI. So why does this tool exist?
+Claude Code can already list and move files via CLI — but you're stuck playing 20 questions with your own config. The dashboard gives you **full visibility in one glance:**
 
-| What you need | CLI / Skill | Visual Dashboard |
+| What you need | Ask Claude | Visual Dashboard |
 |---------------|:-----------:|:----------------:|
-| **Big picture** — see every memory, skill, MCP server across all scopes at once | Scroll through long text output | Scope tree, one glance |
-| **Cross-scope awareness** — understand Global vs Workspace vs Project inheritance | Run multiple commands, piece it together | Tree hierarchy with indentation |
-| **Move items between scopes** | Remember exact paths, type commands | Drag-and-drop |
-| **Preview content** | `cat` each file one by one | Click → side panel |
-| **Search across everything** | `grep` with manual filtering | Real-time search + category filters |
-| **Understand what you have** | Count files per directory yourself | Automatic counts per category per scope |
-
-The dashboard gives you the **big picture that text output can't** — you see the full scope tree, spot misplaced items instantly, and fix them with a drag. No commands to memorize, no paths to type.
+| **See everything at once** across all scopes | `ls` one directory at a time, piece it together | Scope tree, one glance |
+| **What's loaded in my current project?** | Run multiple commands, hope you got them all | Open project → see full inheritance chain |
+| **Move items between scopes** | Find encoded paths, `mv` manually | Drag-and-drop with confirmation |
+| **Read config content** | `cat` each file one by one | Click → side panel |
+| **Find duplicates / stale items** | `grep` across cryptic directories | Search + filter by category |
+| **Clean up unused memories** | Figure out which files to delete | Browse, read, delete in-place |
 
 ## Quick Start
 
@@ -117,16 +125,17 @@ Child scopes inherit parent scope's memories, skills, and MCP servers.
 
 ## Comparison
 
-| Feature | Claude Code Organizer | [claude-control](https://github.com/code-by-gunnar/claude-control) | [claude-admin](https://github.com/conradBruchmann/claude-admin) | [Claude Deck](https://claudedeck.org/) |
-|---------|:--------------------:|:--------------:|:------------:|:----------:|
-| View by scope hierarchy | Yes | Yes | Partial | No |
-| Move between scopes | **Yes** | No (read-only) | No | No |
-| Drag-and-drop | **Yes** | No | No | No |
-| Memories management | **Yes** | No | Yes | No |
-| Skills management | **Yes** | Yes | Yes | No |
-| MCP management | **Yes** | Yes | Yes | Yes |
-| Zero dependencies | **Yes** | No | No | No (React+FastAPI+SQLite) |
-| Standalone (no IDE) | **Yes** | Yes | Yes | Yes |
+We looked at every Claude Code config tool we could find. None offered visual scope hierarchy + drag-and-drop cross-scope moves in a standalone dashboard.
+
+| What I needed | Desktop app (600+⭐) | VS Code extension | Full-stack web app | **Claude Code Organizer** |
+|---------|:---:|:---:|:---:|:---:|
+| Scope hierarchy tree | No | Yes | Partial | **Yes** |
+| Drag-and-drop moves | No | No | No | **Yes** |
+| Cross-scope moves | No | One-click | No | **Yes** |
+| Delete stale items | No | No | No | **Yes** |
+| MCP tools | No | No | Yes | **Yes** |
+| Zero dependencies | No (Tauri) | No (VS Code) | No (React+Rust+SQLite) | **Yes** |
+| Standalone (no IDE) | Yes | No | Yes | **Yes** |
 
 ## Platform Support
 
