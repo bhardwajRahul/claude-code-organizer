@@ -26,14 +26,17 @@ const uiState = {
   sortBy: {}, // { [catKey]: { field: "size"|"date"|"name", dir: "asc"|"desc" } }
 };
 
-const CATEGORY_ORDER = ["skill", "memory", "mcp", "plan", "config", "hook", "plugin", "session"];
+const CATEGORY_ORDER = ["skill", "memory", "mcp", "command", "agent", "plan", "rule", "config", "hook", "plugin", "session"];
 
 const CATEGORIES = {
   memory: { icon: "🧠", label: "Memories", filterLabel: "Memories", group: "memory" },
   skill: { icon: "⚡", label: "Skills", filterLabel: "Skills", group: "skill" },
   session: { icon: "💬", label: "Sessions", filterLabel: "Sessions", group: null },
   mcp: { icon: "🔌", label: "MCP Servers", filterLabel: "MCP", group: "mcp" },
+  command: { icon: "▶️", label: "Commands", filterLabel: "Commands", group: "command" },
+  agent: { icon: "🤖", label: "Agents", filterLabel: "Agents", group: "agent" },
   plan: { icon: "📐", label: "Plans", filterLabel: "Plans", group: "plan" },
+  rule: { icon: "📏", label: "Rules", filterLabel: "Rules", group: null },
   config: { icon: "⚙️", label: "Config", filterLabel: "Config", group: null },
   hook: { icon: "🪝", label: "Hooks", filterLabel: "Hooks", group: null },
   plugin: { icon: "🧩", label: "Plugins", filterLabel: "Plugins", group: null },
@@ -44,7 +47,10 @@ const ITEM_ICONS = {
   skill: "⚡",
   session: "💬",
   mcp: "🔌",
+  command: "▶️",
+  agent: "🤖",
   plan: "📐",
+  rule: "📏",
   config: "⚙️",
   hook: "🪝",
   plugin: "🧩",
@@ -69,6 +75,9 @@ const BADGE_CLASS = {
   plugin: "ib-plugin",
   plan: "ib-plan",
   memory: "ib-feedback",
+  command: "ib-skill",
+  agent: "ib-mcp",
+  rule: "ib-config",
 };
 
 const SHORT_DATE = new Intl.DateTimeFormat("en-US", {
@@ -504,9 +513,12 @@ function renderPills() {
   ];
 
   const allActive = activeFilters.size === 0;
+  const visiblePills = pills.filter((p) => p.key === "all" || p.count > 0 || activeFilters.has(p.key));
+  const hiddenPills = pills.filter((p) => p.key !== "all" && p.count === 0 && !activeFilters.has(p.key));
+  const showHidden = container.dataset.expanded === "true";
 
   container.innerHTML = `
-    ${pills.map((pill) => {
+    ${visiblePills.map((pill) => {
       const isActive = pill.key === "all" ? allActive : activeFilters.has(pill.key);
       return `
         <button type="button" class="f-pill${isActive ? " active" : ""}" data-filter="${pill.key}">
@@ -514,8 +526,24 @@ function renderPills() {
           ${esc(pill.label)}
           <b>${pill.count}</b>
         </button>`;
-    }).join("")}
+    }).join("")}${hiddenPills.length > 0 ? `
+        <button type="button" class="f-pill f-pill-more" id="pillsMore">${showHidden ? "Less ▴" : `+${hiddenPills.length} more ▾`}</button>` : ""}${showHidden ? hiddenPills.map((pill) => `
+        <button type="button" class="f-pill f-pill-dim" data-filter="${pill.key}">
+          <span class="f-pill-ico">${pill.icon}</span>
+          ${esc(pill.label)}
+          <b>0</b>
+        </button>`).join("") : ""}
     <button type="button" class="select-btn${selectMode ? " active" : ""}" id="selectBtn">☐ Select</button>`;
+
+  // Toggle handler for "more" button
+  const moreBtn = document.getElementById("pillsMore");
+  if (moreBtn) {
+    moreBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      container.dataset.expanded = showHidden ? "false" : "true";
+      renderPills();
+    });
+  }
 }
 
 function renderMainContent() {
@@ -749,6 +777,19 @@ function renderCcActions(item) {
     case "plan":
       buttons.push({ ico: "📋", label: "Explain This", prompt: explainPrompt });
       buttons.push({ ico: "▶️", label: "Continue Plan", prompt: `I have an existing Claude Code plan at:\n${item.path}\n\nPlease read this plan and:\n1. Summarize what the plan is about\n2. Show which steps are done and which are remaining\n3. Ask me if I want to continue from where it left off` });
+      break;
+    case "command":
+      buttons.push({ ico: "📋", label: "Explain This", prompt: explainPrompt });
+      buttons.push({ ico: "✏️", label: "Edit Command", prompt: `I want to edit this Claude Code command: "${item.name}"\nPath: ${item.path}\n\nBefore editing:\n1. Read the current content\n2. Explain what this command does and its argument format\n3. Ask me what I want to change\n4. Show the before vs after diff\n5. Only save after I confirm` });
+      break;
+    case "agent":
+      buttons.push({ ico: "📋", label: "Explain This", prompt: explainPrompt });
+      buttons.push({ ico: "✏️", label: "Edit Agent", prompt: `I want to edit this Claude Code agent: "${item.name}"\nPath: ${item.path}\n\nBefore editing:\n1. Read the current content\n2. Explain what this agent does, what tools it has, and what model it uses\n3. Ask me what I want to change\n4. Show the before vs after diff\n5. Only save after I confirm` });
+      break;
+    case "rule":
+      buttons.push({ ico: "💡", label: "", prompt: null, info: "Rules enforce project-specific constraints. Use these prompts to understand or modify them." });
+      buttons.push({ ico: "📋", label: "Explain This", prompt: `I have a Claude Code rule: "${item.name}"\nPath: ${item.path}\n\nPlease read this rule and explain:\n1. What constraint does it enforce?\n2. Why was it created?\n3. What would happen if it were removed?\n4. Are there any edge cases it doesn't cover?` });
+      buttons.push({ ico: "✏️", label: "Modify", prompt: `I want to modify this Claude Code rule: "${item.name}"\nPath: ${item.path}\n\nBefore making any changes:\n1. Read the current content\n2. Explain the rule\n3. Ask me what I want to change\n4. Show the before vs after diff\n5. Warn if the change could weaken important constraints\n6. Only save after I confirm` });
       break;
     case "config":
       buttons.push({ ico: "💡", label: "", prompt: null, info: "Config files are managed by Claude Code. Use these prompts to ask Claude Code to help you understand or modify them." });

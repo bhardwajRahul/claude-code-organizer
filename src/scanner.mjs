@@ -703,6 +703,134 @@ async function scanPlans(scope) {
   return items;
 }
 
+async function scanRules(scope) {
+  const items = [];
+  let rulesDirs = [];
+
+  if (scope.id === "global") {
+    const dir = join(CLAUDE_DIR, "rules");
+    if (await exists(dir)) rulesDirs.push(dir);
+  } else if (scope.repoDir) {
+    const dir = join(scope.repoDir, ".claude", "rules");
+    if (await exists(dir)) rulesDirs.push(dir);
+  }
+
+  if (rulesDirs.length === 0) return items;
+  const rulesDir = rulesDirs[0];
+  if (!(await exists(rulesDir))) return items;
+
+  const files = await readdir(rulesDir);
+  for (const f of files) {
+    if (!f.endsWith(".md")) continue;
+    const fullPath = join(rulesDir, f);
+    const s = await safeStat(fullPath);
+    const content = await safeReadFile(fullPath);
+
+    // Extract first heading as description
+    let desc = "";
+    if (content) {
+      const headingMatch = content.match(/^#\s+(.+)/m);
+      if (headingMatch) desc = headingMatch[1].slice(0, 120);
+    }
+
+    items.push({
+      category: "rule",
+      scopeId: scope.id,
+      name: f.replace(".md", ""),
+      fileName: f,
+      description: desc,
+      subType: "rule",
+      size: s ? formatSize(s.size) : "0B",
+      sizeBytes: s ? s.size : 0,
+      mtime: s ? s.mtime.toISOString().slice(0, 10) : "",
+      ctime: s ? s.birthtime.toISOString().slice(0, 10) : "",
+      path: fullPath,
+    });
+  }
+
+  return items;
+}
+
+async function scanCommands(scope) {
+  const items = [];
+  let cmdDirs = [];
+
+  if (scope.id === "global") {
+    const dir = join(CLAUDE_DIR, "commands");
+    if (await exists(dir)) cmdDirs.push(dir);
+  } else if (scope.repoDir) {
+    const dir = join(scope.repoDir, ".claude", "commands");
+    if (await exists(dir)) cmdDirs.push(dir);
+  }
+
+  for (const cmdDir of cmdDirs) {
+    const files = await readdir(cmdDir);
+    for (const f of files) {
+      if (!f.endsWith(".md")) continue;
+      const fullPath = join(cmdDir, f);
+      const s = await safeStat(fullPath);
+      const content = await safeReadFile(fullPath);
+      const fm = parseFrontmatter(content);
+
+      items.push({
+        category: "command",
+        scopeId: scope.id,
+        name: fm.name || f.replace(".md", ""),
+        fileName: f,
+        description: fm.description || "",
+        subType: "command",
+        size: s ? formatSize(s.size) : "0B",
+        sizeBytes: s ? s.size : 0,
+        mtime: s ? s.mtime.toISOString().slice(0, 10) : "",
+        ctime: s ? s.birthtime.toISOString().slice(0, 10) : "",
+        path: fullPath,
+      });
+    }
+  }
+
+  return items;
+}
+
+async function scanAgents(scope) {
+  const items = [];
+  let agentDirs = [];
+
+  if (scope.id === "global") {
+    const dir = join(CLAUDE_DIR, "agents");
+    if (await exists(dir)) agentDirs.push(dir);
+  } else if (scope.repoDir) {
+    const dir = join(scope.repoDir, ".claude", "agents");
+    if (await exists(dir)) agentDirs.push(dir);
+  }
+
+  for (const agentDir of agentDirs) {
+    const files = await readdir(agentDir);
+    for (const f of files) {
+      if (!f.endsWith(".md")) continue;
+      const fullPath = join(agentDir, f);
+      const s = await safeStat(fullPath);
+      const content = await safeReadFile(fullPath);
+      const fm = parseFrontmatter(content);
+
+      items.push({
+        category: "agent",
+        scopeId: scope.id,
+        name: fm.name || f.replace(".md", ""),
+        fileName: f,
+        description: fm.description || "",
+        subType: "agent",
+        size: s ? formatSize(s.size) : "0B",
+        sizeBytes: s ? s.size : 0,
+        mtime: s ? s.mtime.toISOString().slice(0, 10) : "",
+        ctime: s ? s.birthtime.toISOString().slice(0, 10) : "",
+        path: fullPath,
+      });
+    }
+  }
+
+  return items;
+}
+
 async function scanSessions(scope) {
   if (scope.id === "global" || !scope.claudeProjectDir) return [];
 
@@ -786,7 +914,7 @@ export async function scan() {
 
   // Scan per-scope items
   for (const scope of scopes) {
-    const [memories, skills, mcpServers, configs, hooks, plans, sessions] = await Promise.all([
+    const [memories, skills, mcpServers, configs, hooks, plans, sessions, rules, commands, agents] = await Promise.all([
       scanMemories(scope),
       scanSkills(scope),
       scanMcpServers(scope),
@@ -794,8 +922,11 @@ export async function scan() {
       scanHooks(scope),
       scanPlans(scope),
       scanSessions(scope),
+      scanRules(scope),
+      scanCommands(scope),
+      scanAgents(scope),
     ]);
-    allItems.push(...memories, ...skills, ...mcpServers, ...configs, ...hooks, ...plans, ...sessions);
+    allItems.push(...memories, ...skills, ...mcpServers, ...configs, ...hooks, ...plans, ...sessions, ...rules, ...commands, ...agents);
   }
 
   // Scan global-only items

@@ -54,6 +54,27 @@ function resolvePlanDir(scopeId) {
   return join(CLAUDE_DIR, "projects", scopeId, "plans");
 }
 
+function resolveRuleDir(scopeId, scopes) {
+  if (scopeId === "global") return join(CLAUDE_DIR, "rules");
+  const scope = scopes.find(s => s.id === scopeId);
+  if (!scope || !scope.repoDir) return null;
+  return join(scope.repoDir, ".claude", "rules");
+}
+
+function resolveCommandDir(scopeId, scopes) {
+  if (scopeId === "global") return join(CLAUDE_DIR, "commands");
+  const scope = scopes.find(s => s.id === scopeId);
+  if (!scope || !scope.repoDir) return null;
+  return join(scope.repoDir, ".claude", "commands");
+}
+
+function resolveAgentDir(scopeId, scopes) {
+  if (scopeId === "global") return join(CLAUDE_DIR, "agents");
+  const scope = scopes.find(s => s.id === scopeId);
+  if (!scope || !scope.repoDir) return null;
+  return join(scope.repoDir, ".claude", "agents");
+}
+
 function resolveMcpJson(scopeId, scopes) {
   if (scopeId === "global") return join(CLAUDE_DIR, ".mcp.json");
   const scope = scopes.find(s => s.id === scopeId);
@@ -74,8 +95,8 @@ function validateMove(item, toScopeId) {
     return { ok: false, error: "Item is already in this scope" };
   }
 
-  // Only memory, skill, mcp, plan can move
-  const movableCategories = ["memory", "skill", "mcp", "plan"];
+  // Only memory, skill, mcp, plan, command, agent, rule can move
+  const movableCategories = ["memory", "skill", "mcp", "plan", "command", "agent", "rule"];
   if (!movableCategories.includes(item.category)) {
     return { ok: false, error: `${item.category} items cannot be moved` };
   }
@@ -148,6 +169,78 @@ async function movePlan(item, toScopeId) {
     from: item.path,
     to: toPath,
     message: `Moved plan "${item.name}" from ${item.scopeId} to ${toScopeId}`,
+  };
+}
+
+// ── Move rule file ──────────────────────────────────────────────────
+
+async function moveRule(item, toScopeId, scopes) {
+  const toDir = resolveRuleDir(toScopeId, scopes);
+  if (!toDir) {
+    return { ok: false, error: `Cannot resolve rules directory for scope: ${toScopeId}` };
+  }
+  const toPath = join(toDir, item.fileName);
+
+  if (existsSync(toPath)) {
+    return { ok: false, error: `Rule already exists at destination: ${item.fileName}` };
+  }
+
+  await mkdir(toDir, { recursive: true });
+  await safeRename(item.path, toPath);
+
+  return {
+    ok: true,
+    from: item.path,
+    to: toPath,
+    message: `Moved rule "${item.name}" from ${item.scopeId} to ${toScopeId}`,
+  };
+}
+
+// ── Move command file ───────────────────────────────────────────────
+
+async function moveCommand(item, toScopeId, scopes) {
+  const toDir = resolveCommandDir(toScopeId, scopes);
+  if (!toDir) {
+    return { ok: false, error: `Cannot resolve commands directory for scope: ${toScopeId}` };
+  }
+  const toPath = join(toDir, item.fileName);
+
+  if (existsSync(toPath)) {
+    return { ok: false, error: `Command already exists at destination: ${item.fileName}` };
+  }
+
+  await mkdir(toDir, { recursive: true });
+  await safeRename(item.path, toPath);
+
+  return {
+    ok: true,
+    from: item.path,
+    to: toPath,
+    message: `Moved command "${item.name}" from ${item.scopeId} to ${toScopeId}`,
+  };
+}
+
+// ── Move agent file ────────────────────────────────────────────────
+
+async function moveAgent(item, toScopeId, scopes) {
+  const toDir = resolveAgentDir(toScopeId, scopes);
+  if (!toDir) {
+    return { ok: false, error: `Cannot resolve agents directory for scope: ${toScopeId}` };
+  }
+  const toPath = join(toDir, item.fileName);
+
+  if (existsSync(toPath)) {
+    return { ok: false, error: `Agent already exists at destination: ${item.fileName}` };
+  }
+
+  await mkdir(toDir, { recursive: true });
+  await safeRename(item.path, toPath);
+
+  return {
+    ok: true,
+    from: item.path,
+    to: toPath,
+    message: `Moved agent "${item.name}" from ${item.scopeId} to ${toScopeId}`,
   };
 }
 
@@ -230,6 +323,12 @@ export async function moveItem(item, toScopeId, scopes) {
         return await moveMcp(item, toScopeId, scopes);
       case "plan":
         return await movePlan(item, toScopeId);
+      case "command":
+        return await moveCommand(item, toScopeId, scopes);
+      case "agent":
+        return await moveAgent(item, toScopeId, scopes);
+      case "rule":
+        return await moveRule(item, toScopeId, scopes);
       default:
         return { ok: false, error: `Unknown category: ${item.category}` };
     }
@@ -285,7 +384,7 @@ export async function deleteItem(item, scopes) {
     return { ok: false, error: `${item.name} is locked and cannot be deleted` };
   }
 
-  const deletableCategories = ["memory", "skill", "mcp", "plan", "session"];
+  const deletableCategories = ["memory", "skill", "mcp", "plan", "session", "command", "agent", "rule"];
   if (!deletableCategories.includes(item.category)) {
     return { ok: false, error: `${item.category} items cannot be deleted` };
   }
@@ -294,7 +393,10 @@ export async function deleteItem(item, scopes) {
     switch (item.category) {
       case "memory":
       case "plan":
-        return await deleteMemory(item); // both are single .md files
+      case "command":
+      case "agent":
+      case "rule":
+        return await deleteMemory(item); // all are single .md files
       case "session":
         return await deleteSession(item);
       case "skill":
@@ -329,6 +431,12 @@ export function getValidDestinations(item, scopes) {
           return true; // mcp can go to any scope
         case "plan":
           return true; // plans can go to any scope
+        case "command":
+          return s.id === "global" || s.repoDir;
+        case "agent":
+          return s.id === "global" || s.repoDir;
+        case "rule":
+          return s.id === "global" || s.repoDir;
         default:
           return false;
       }

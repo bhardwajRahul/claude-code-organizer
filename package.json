@@ -1,7 +1,7 @@
 {
   "name": "@mcpware/claude-code-organizer",
-  "version": "0.4.1",
-  "description": "Organize all your Claude Code memories, skills, MCP servers, and hooks — view by scope hierarchy, move between scopes via drag-and-drop",
+  "version": "0.5.0",
+  "description": "Organize all your Claude Code memories, skills, MCP servers, commands, agents, rules, and hooks — view by scope hierarchy, move between scopes via drag-and-drop",
   "type": "module",
   "bin": {
     "claude-code-organizer": "./bin/cli.mjs"

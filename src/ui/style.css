@@ -299,6 +299,10 @@ body {
 .f-pill-ico { font-size: 0.78rem; }
 .f-pill b { font-weight: 700; opacity: 0.7; }
 .f-pill.active b { opacity: 0.9; }
+.f-pill-dim { opacity: 0.4; }
+.f-pill-dim:hover { opacity: 0.7; }
+.f-pill-more { font-style: italic; opacity: 0.6; border-style: dashed; }
+.f-pill-more:hover { opacity: 1; }
 
 .select-btn {
   margin-left: auto;
