@@ -16,7 +16,7 @@ English | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [�
 
 ## The Problem
 
-Claude Code silently creates memories, skills, and MCP configs every time you work — and dumps them into whatever scope matches your current directory. A preference you wanted everywhere? Trapped in one project. A deploy skill that belongs to one repo? Leaked into global, contaminating every other project.
+Claude Code silently creates memories, skills, MCP configs, commands, agents, and rules every time you work — and dumps them into whatever scope matches your current directory. A preference you wanted everywhere? Trapped in one project. A deploy skill that belongs to one repo? Leaked into global, contaminating every other project.
 
 **This isn't just messy — it hurts your AI's performance.** Every session, Claude loads all configs from the current scope plus everything inherited from parent scopes into your context window. Wrong-scope items = wasted tokens, polluted context, and lower accuracy. A Python pipeline skill sitting in global gets loaded into your React frontend session. Duplicate MCP entries initialize the same server twice. Stale memories contradict your current instructions.
 
@@ -58,6 +58,7 @@ We analyzed the source code of every Claude Code tool we could find — analytic
 | Undo on every action | **Yes** | No | No | No | No |
 | Bulk operations | **Yes** | No | No | No | No |
 | Real MCP server management | **Yes** | Global only | Stub (icon only) | No | No |
+| Commands + Agents + Rules | **Yes** | No | No | No | No |
 | Session management | **Yes** | No | No | Yes | Yes |
 | Search & filter | **Yes** | No | Yes | Yes | No |
 | MCP tools (AI-accessible) | **Yes** | No | No | No | No |
@@ -67,19 +68,22 @@ We analyzed the source code of every Claude Code tool we could find — analytic
 ## Features
 
 - **Scope-aware hierarchy** — See all items organized as Global > Workspace > Project, with inheritance indicators
-- **Drag-and-drop** — Move memories between scopes, skills between global and per-repo, MCP servers between configs
+- **Drag-and-drop** — Move memories, skills, commands, agents, rules, MCP servers, and plans between scopes
 - **Undo everything** — Every move and delete has an undo button — restore instantly, including MCP JSON entries
 - **Bulk operations** — Select mode: tick multiple items, move or delete all at once
-- **Same-type safety** — Memories can only move to memory folders, skills to skill folders, MCP to MCP configs
+- **Same-type safety** — Each category moves to its own directory — memories to memory/, skills to skills/, commands to commands/, etc.
 - **Search & filter** — Real-time search across all items, filter by category with smart pill hiding (zero-count pills collapse into "+N more")
 - **Detail panel** — Click any item to see full metadata, content preview, file path, and open in VS Code
 - **Session inspector** — Parsed conversation previews with speaker labels, session titles, and metadata
 - **11 categories** — Memories, skills, MCP servers, commands, agents, rules, configs, hooks, plugins, plans, and sessions
 - **Bundled skill detection** — Groups skills by source bundle via `skills-lock.json`
-- **Contextual Claude Code prompts** — "Explain This", "Edit Content", "Resume Session" buttons that copy to clipboard
+- **Contextual Claude Code prompts** — "Explain This", "Edit Content", "Edit Command", "Edit Agent", "Resume Session" buttons that copy to clipboard
+- **Auto-hide detail panel** — Panel stays hidden until you click an item, maximizing content area
 - **Resizable panels** — Drag dividers to resize sidebar, content area, and detail panel
 - **Real file moves** — Actually moves files in `~/.claude/`, not just a viewer
-- **92 E2E tests** — Playwright test suite with real filesystem verification, security tests, and new category coverage
+- **Path traversal protection** — All file endpoints validate paths are within HOME directory
+- **Cross-device support** — Automatic copy+delete fallback when rename fails across filesystems (Docker/WSL)
+- **92 E2E tests** — Playwright test suite covering filesystem verification, security (path traversal, malformed input), and all 11 categories
 
 ## Why a Visual Dashboard?
 
@@ -144,7 +148,7 @@ Global                       <- applies everywhere
   Documents (project)        <- independent project
 ```
 
-Child scopes inherit parent scope's memories, skills, and MCP servers.
+Child scopes inherit parent scope's memories, skills, MCP servers, commands, agents, and rules.
 
 ## How It Works
 

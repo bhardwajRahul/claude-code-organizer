@@ -1727,7 +1727,7 @@ function sortArrow(catKey, field) {
 }
 
 function canMoveItem(item) {
-  return !item.locked && ["memory", "skill", "mcp", "plan"].includes(item.category);
+  return !item.locked && ["memory", "skill", "mcp", "plan", "command", "agent", "rule"].includes(item.category);
 }
 
 function canDeleteItem(item) {
