@@ -49,13 +49,18 @@ Claude auto-creates memories from things you said casually, or things it *though
 
 - **Scope-aware hierarchy** — See all items organized as Global > Workspace > Project, with inheritance indicators
 - **Drag-and-drop** — Move memories between scopes, skills between global and per-repo, MCP servers between configs
-- **Move confirmation** — Every move shows a confirmation modal before touching any files
+- **Undo everything** — Every move and delete has an undo button — restore instantly, including MCP JSON entries
+- **Bulk operations** — Select mode: tick multiple items, move or delete all at once
 - **Same-type safety** — Memories can only move to memory folders, skills to skill folders, MCP to MCP configs
-- **Search & filter** — Instantly search across all items, filter by category (Memory, Skills, MCP, Config, Hooks, Plugins, Plans)
-- **Detail panel** — Click any item to see full metadata, description, file path, and open in VS Code
-- **Full per-project scanning** — Every scope shows all item types: memories, skills, MCP servers, configs, hooks, and plans
+- **Search & filter** — Real-time search across all items, filter by category (Memory, Skills, MCP, Config, Hooks, Plugins, Plans, Sessions)
+- **Detail panel** — Click any item to see full metadata, content preview, file path, and open in VS Code
+- **Session inspector** — Parsed conversation previews with speaker labels, session titles, and metadata
+- **8 categories** — Memories, skills, MCP servers, configs, hooks, plugins, plans, and sessions
+- **Bundled skill detection** — Groups skills by source bundle via `skills-lock.json`
+- **Contextual Claude Code prompts** — "Explain This", "Edit Content", "Resume Session" buttons that copy to clipboard
+- **Resizable panels** — Drag dividers to resize sidebar, content area, and detail panel
 - **Real file moves** — Actually moves files in `~/.claude/`, not just a viewer
-- **45 E2E tests** — Playwright test suite with real filesystem verification after every operation
+- **61 E2E tests** — Playwright test suite with real filesystem verification after every operation
 
 ## Why a Visual Dashboard?
 
@@ -95,15 +100,16 @@ Opens a dashboard at `http://localhost:3847`. Works with your real `~/.claude/` 
 
 ## What It Manages
 
-| Type | View | Move | Scanned at | Why locked? |
-|------|:----:|:----:|:----------:|-------------|
-| Memories (feedback, user, project, reference) | Yes | Yes | Global + Project | — |
-| Skills | Yes | Yes | Global + Project | — |
-| MCP Servers | Yes | Yes | Global + Project | — |
-| Config (CLAUDE.md, settings.json) | Yes | Locked | Global + Project | System settings — move could break config |
-| Hooks | Yes | Locked | Global + Project | Depends on settings context — silent failures if moved |
-| Plans | Yes | Yes | Global + Project | — |
-| Plugins | Yes | Locked | Global only | Claude Code managed cache |
+| Type | View | Move | Delete | Scanned at |
+|------|:----:|:----:|:------:|:----------:|
+| Memories (feedback, user, project, reference) | Yes | Yes | Yes | Global + Project |
+| Skills (with bundle detection) | Yes | Yes | Yes | Global + Project |
+| MCP Servers | Yes | Yes | Yes | Global + Project |
+| Plans | Yes | Yes | Yes | Global + Project |
+| Sessions | Yes | — | Yes | Project only |
+| Config (CLAUDE.md, settings.json) | Yes | Locked | — | Global + Project |
+| Hooks | Yes | Locked | — | Global + Project |
+| Plugins | Yes | Locked | — | Global only |
 
 ## Scope Hierarchy
 
@@ -120,10 +126,11 @@ Child scopes inherit parent scope's memories, skills, and MCP servers.
 
 ## How It Works
 
-1. **Scans** `~/.claude/` — discovers all projects, memories, skills, MCP servers, hooks, plugins, plans
+1. **Scans** `~/.claude/` — discovers all projects, memories, skills, MCP servers, hooks, plugins, plans, and sessions
 2. **Resolves scope hierarchy** — determines parent-child relationships from filesystem paths
-3. **Renders dashboard** — scope headers > category bars > item rows, with proper indentation
-4. **Handles moves** — when you drag or click "Move to...", actually moves files on disk with safety checks
+3. **Renders dashboard** — three-panel layout: sidebar scope tree, category-grouped items, detail panel with content preview
+4. **Handles moves** — drag or click "Move to...", moves files on disk with safety checks, undo support
+5. **Handles deletes** — delete with undo, bulk delete, session cleanup
 
 ## Comparison
 
@@ -134,7 +141,10 @@ We looked at every Claude Code config tool we could find. None offered visual sc
 | Scope hierarchy tree | No | Yes | Partial | **Yes** |
 | Drag-and-drop moves | No | No | No | **Yes** |
 | Cross-scope moves | No | One-click | No | **Yes** |
-| Delete stale items | No | No | No | **Yes** |
+| Undo on every action | No | No | No | **Yes** |
+| Bulk operations | No | No | No | **Yes** |
+| Session management | No | No | No | **Yes** |
+| Search & filter | No | Yes | Yes | **Yes** |
 | MCP tools | No | No | Yes | **Yes** |
 | Zero dependencies | No (Tauri) | No (VS Code) | No (React+Rust+SQLite) | **Yes** |
 | Standalone (no IDE) | Yes | No | Yes | **Yes** |
@@ -152,15 +162,16 @@ We looked at every Claude Code config tool we could find. None offered visual sc
 
 ```
 src/
-  scanner.mjs       # Scans ~/.claude/ — pure data, no side effects
-  mover.mjs         # Moves files between scopes — safety checks + rollback
-  server.mjs        # HTTP server — routes only, no logic
+  scanner.mjs       # Scans ~/.claude/ — 8 categories, pure data, no side effects
+  mover.mjs         # Moves/deletes files between scopes — safety checks + undo support
+  server.mjs        # HTTP server — 8 REST endpoints
+  mcp-server.mjs    # MCP server — 4 tools for AI clients (scan, move, delete, destinations)
   ui/
-    index.html       # HTML structure
+    index.html       # Three-panel layout with resizable dividers
     style.css        # All styling (edit freely, won't break logic)
-    app.js           # Frontend rendering + SortableJS + interactions
+    app.js           # Frontend: drag-drop, search, filters, bulk ops, undo, session preview
 bin/
-  cli.mjs            # Entry point
+  cli.mjs            # Entry point (--mcp flag for MCP server mode)
 ```
 
 Frontend and backend are fully separated. Edit `src/ui/` files to change the look without touching any logic.
@@ -173,11 +184,12 @@ The dashboard is backed by a REST API:
 |----------|--------|-------------|
 | `/api/scan` | GET | Scan all customizations, returns scopes + items + counts |
 | `/api/move` | POST | Move an item to a different scope (supports category/name disambiguation) |
-| `/api/delete` | POST | Delete an item permanently |
-| `/api/restore` | POST | Restore a deleted file (for undo) |
-| `/api/restore-mcp` | POST | Restore a deleted MCP server entry |
+| `/api/delete` | POST | Delete an item (memory, skill, MCP, plan, session) |
+| `/api/restore` | POST | Restore a deleted file (undo support) |
+| `/api/restore-mcp` | POST | Restore a deleted MCP server JSON entry (undo support) |
 | `/api/destinations` | GET | Get valid move destinations for an item |
-| `/api/file-content` | GET | Read file content for detail panel |
+| `/api/file-content` | GET | Read file content for detail panel preview |
+| `/api/session-preview` | GET | Parse JSONL session into readable conversation with speaker labels |
 
 ## License
 
