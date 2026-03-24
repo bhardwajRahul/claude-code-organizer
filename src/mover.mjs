@@ -252,6 +252,14 @@ async function deleteMcp(item) {
   return { ok: true, deleted: mcpJson, message: `Deleted MCP server "${item.name}"` };
 }
 
+async function deleteSession(item) {
+  // Delete the .jsonl file + any subagent directory with the same UUID
+  await unlink(item.path);
+  const sessionDir = item.path.replace(/\.jsonl$/, "");
+  try { await rm(sessionDir, { recursive: true, force: true }); } catch { /* no subagent dir */ }
+  return { ok: true, deleted: item.path, message: `Deleted session "${item.name}"` };
+}
+
 /**
  * Delete an item permanently.
  */
@@ -260,7 +268,7 @@ export async function deleteItem(item, scopes) {
     return { ok: false, error: `${item.name} is locked and cannot be deleted` };
   }
 
-  const deletableCategories = ["memory", "skill", "mcp", "plan"];
+  const deletableCategories = ["memory", "skill", "mcp", "plan", "session"];
   if (!deletableCategories.includes(item.category)) {
     return { ok: false, error: `${item.category} items cannot be deleted` };
   }
@@ -268,7 +276,10 @@ export async function deleteItem(item, scopes) {
   try {
     switch (item.category) {
       case "memory":
-        return await deleteMemory(item);
+      case "plan":
+        return await deleteMemory(item); // both are single .md files
+      case "session":
+        return await deleteSession(item);
       case "skill":
         return await deleteSkill(item);
       case "mcp":

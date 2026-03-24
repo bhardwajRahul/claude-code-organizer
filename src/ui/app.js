@@ -284,9 +284,10 @@ function renderItem(item) {
 
   const checkbox = item.locked ? "" : `<input type="checkbox" class="row-chk" data-path="${esc(item.path)}"${checked}>`;
 
+  const moveBtn = (item.locked || item.deletable) ? "" : `<button class="rbtn" data-action="move">Move</button>`;
   const actions = item.locked ? "" : `
     <span class="row-acts">
-      <button class="rbtn" data-action="move">Move</button>
+      ${moveBtn}
       <button class="rbtn" data-action="open">Open</button>
       <button class="rbtn rbtn-danger" data-action="delete">Delete</button>
     </span>`;

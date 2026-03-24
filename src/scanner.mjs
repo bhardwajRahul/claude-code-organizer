@@ -738,7 +738,7 @@ async function scanSessions(scope) {
       sizeBytes: s ? s.size : 0,
       mtime: s ? s.mtime.toISOString().slice(0, 10) : "",
       path: fullPath,
-      locked: true,
+      deletable: true, // sessions can be deleted but not moved
     });
   }
 

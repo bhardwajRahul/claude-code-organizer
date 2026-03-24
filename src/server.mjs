@@ -203,6 +203,7 @@ async function handleRequest(req, res) {
       const lines = raw.trim().split("\n");
       const messages = [];
       let title = null;
+      let totalMessages = 0;
 
       for (const line of lines) {
         try {
@@ -215,7 +216,7 @@ async function handleRequest(req, res) {
               .map(c => c.text)
               .join("\n");
             if (text.trim()) {
-              // Truncate long assistant messages
+              totalMessages++;
               const display = text.length > 500 ? text.slice(0, 500) + "\n... (truncated)" : text;
               messages.push(`${role}:\n${display}`);
             }
@@ -223,8 +224,13 @@ async function handleRequest(req, res) {
         } catch { /* skip malformed lines */ }
       }
 
+      // Show last 20 messages (most recent conversation)
+      const last20 = messages.slice(-20);
       const header = title ? `# ${title}\n\n` : "";
-      const preview = header + messages.slice(0, 20).join("\n\n---\n\n");
+      const showing = totalMessages > 20
+        ? `Showing last 20 of ${totalMessages} messages\n\n`
+        : `${totalMessages} messages\n\n`;
+      const preview = header + showing + last20.join("\n\n---\n\n");
       return json(res, { ok: true, content: preview || "(empty session)" });
     } catch {
       return json(res, { ok: false, error: "Cannot read session" }, 400);

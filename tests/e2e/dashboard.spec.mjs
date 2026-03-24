@@ -392,7 +392,8 @@ test.describe('API Layer', () => {
     expect(titled).toBeTruthy();
     expect(titled.scopeId).toBe(env.encodedProject);
     expect(titled.description).toContain('refactor the auth module');
-    expect(titled.locked).toBe(true);
+    expect(titled.deletable).toBe(true);
+    expect(titled.locked).toBeFalsy();
   });
 
   test('scan detects sessions without title using UUID as name', async () => {
@@ -421,11 +422,40 @@ test.describe('API Layer', () => {
     await expect(sessionPill).toContainText('2');
   });
 
+  test('session has delete button but no move button in UI', async ({ page }) => {
+    await page.goto(env.baseURL);
+    await page.waitForSelector('#loading', { state: 'hidden' });
+    await page.click('#expandToggle');
+
+    const sessionRow = page.locator('.item-row[data-category="session"]').first();
+    if (await sessionRow.count() > 0) {
+      // Should have delete and open, but NOT move
+      await expect(sessionRow.locator('.rbtn[data-action="delete"]')).toHaveCount(1);
+      await expect(sessionRow.locator('.rbtn[data-action="open"]')).toHaveCount(1);
+      await expect(sessionRow.locator('.rbtn[data-action="move"]')).toHaveCount(0);
+    }
+  });
+
+  test('delete session removes .jsonl file from disk', async () => {
+    const { items } = await (await fetch(`${env.baseURL}/api/scan`)).json();
+    const session = items.find(i => i.category === 'session' && i.name.includes('11111111'));
+    expect(session).toBeTruthy();
+    expect(await fileExists(session.path)).toBe(true);
+
+    const res = await fetch(`${env.baseURL}/api/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemPath: session.path, category: 'session', name: session.name }),
+    });
+    expect((await res.json()).ok).toBe(true);
+    expect(await fileExists(session.path)).toBe(false);
+  });
+
   test('all non-movable item types are locked', async () => {
     const { items } = await (await fetch(`${env.baseURL}/api/scan`)).json();
 
     // These categories must ALL be locked
-    const lockedCategories = ['config', 'hook', 'plugin', 'session'];
+    const lockedCategories = ['config', 'hook', 'plugin'];
     for (const cat of lockedCategories) {
       const catItems = items.filter(i => i.category === cat);
       for (const item of catItems) {
