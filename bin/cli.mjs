@@ -60,6 +60,26 @@ if (!isMcpMode) {
   }
 }
 
+// ── Update check (non-blocking) ──
+async function checkForUpdate() {
+  try {
+    const { createRequire } = await import('node:module');
+    const require = createRequire(import.meta.url);
+    const pkg = require('../package.json');
+    const localVersion = pkg.version;
+
+    const resp = await fetch('https://registry.npmjs.org/@mcpware/claude-code-organizer/latest', { signal: AbortSignal.timeout(3000) });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const latestVersion = data.version;
+
+    if (localVersion !== latestVersion) {
+      return { local: localVersion, latest: latestVersion };
+    }
+  } catch { /* silent — don't block startup */ }
+  return null;
+}
+
 if (isMcpMode) {
   // MCP server mode — AI clients connect via stdio
   await import('../src/mcp-server.mjs');
@@ -71,7 +91,19 @@ if (isMcpMode) {
   const portIdx = args.indexOf('--port');
   const port = portIdx !== -1 ? parseInt(args[portIdx + 1], 10) : 3847;
 
+  // Check for update in background (don't block server start)
+  const updatePromise = checkForUpdate();
+
   startServer(port);
+
+  // Show update notice after server starts (CLI users)
+  updatePromise.then(update => {
+    if (update) {
+      console.log(`\n  📦 New version available! You're not on the latest.`);
+      console.log(`     Run: npx @mcpware/claude-code-organizer@latest`);
+      console.log(`     Or:  npm update -g @mcpware/claude-code-organizer\n`);
+    }
+  });
 
   try {
     const openCmd = process.platform === 'darwin' ? 'open' : 'xdg-open';

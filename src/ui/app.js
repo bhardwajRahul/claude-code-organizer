@@ -92,10 +92,32 @@ async function init() {
     initializeScopeState();
     setupUi();
     renderAll();
+    checkForUpdate();
   } catch (error) {
     document.getElementById("loading").textContent = "Failed to load inventory";
     toast(error?.message || "Failed to load inventory", true);
   }
+}
+
+async function checkForUpdate() {
+  try {
+    const { updateAvailable } = await fetchJson("/api/version");
+    if (!updateAvailable) return;
+    const footer = document.querySelector(".sidebar-footer");
+    if (!footer) return;
+    const banner = document.createElement("div");
+    banner.className = "update-banner";
+    banner.innerHTML = "🔄 New version available — <code>npx @mcpware/claude-code-organizer@latest</code>";
+    banner.addEventListener("click", () => {
+      navigator.clipboard.writeText("Run npx @mcpware/claude-code-organizer@latest to update Claude Code Organizer to the latest version.").then(() => {
+        banner.innerHTML = "✅ Copied! Paste into Claude Code";
+        setTimeout(() => {
+          banner.innerHTML = "🔄 New version available — <code>npx @mcpware/claude-code-organizer@latest</code>";
+        }, 2000);
+      });
+    });
+    footer.prepend(banner);
+  } catch { /* silent */ }
 }
 
 async function fetchJson(url) {

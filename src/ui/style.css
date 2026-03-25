@@ -254,6 +254,20 @@ body {
   padding: 1px 5px;
   border-radius: 3px;
 }
+.update-banner {
+  font-size: 0.65rem;
+  color: #f0c040 !important;
+  background: oklch(0.25 0.06 80);
+  padding: 6px 8px !important;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  display: block;
+  text-align: center;
+}
+.update-banner:hover { background: oklch(0.30 0.07 80) !important; cursor: pointer; }
+.update-banner::after { content: "Click to copy update command — paste into Claude Code"; display: block; font-size: 0.55rem; opacity: 0; transition: opacity 150ms; margin-top: 2px; color: #d4c080; }
+.update-banner:hover::after { opacity: 1; }
+.update-banner code { background: oklch(0.20 0.04 80); padding: 1px 5px; border-radius: 3px; font-size: 0.6rem; }
 .s-cat-ico { font-size: 0.78rem; }
 .s-cat-nm { font-weight: 400; flex: 1; }
 .s-cat-cnt { font-size: 0.65rem; }

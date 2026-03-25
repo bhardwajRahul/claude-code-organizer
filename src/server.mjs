@@ -104,6 +104,27 @@ async function handleRequest(req, res) {
 
   // ── API routes ──
 
+  // GET /api/version — check for updates (UI calls this)
+  if (path === "/api/version" && req.method === "GET") {
+    const require = createRequire(import.meta.url);
+    const { version: local } = require("../package.json");
+    try {
+      const data = await new Promise((resolve, reject) => {
+        const req = https.get("https://registry.npmjs.org/@mcpware/claude-code-organizer/latest", { timeout: 3000 }, (res) => {
+          let body = "";
+          res.on("data", (c) => (body += c));
+          res.on("end", () => resolve(body));
+        });
+        req.on("error", reject);
+        req.on("timeout", () => { req.destroy(); reject(new Error("timeout")); });
+      });
+      const { version: latest } = JSON.parse(data);
+      return json(res, { local, latest, updateAvailable: latest !== local });
+    } catch {
+      return json(res, { local, latest: null, updateAvailable: false });
+    }
+  }
+
   // GET /api/scan — full scan of all customizations
   if (path === "/api/scan" && req.method === "GET") {
     const data = await freshScan();
