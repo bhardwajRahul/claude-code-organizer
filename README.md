@@ -142,9 +142,9 @@ claude-code-organizer
 
 Paste this into Claude Code:
 
-> Run `npx @mcpware/claude-code-organizer` — it's a dashboard for managing Claude Code settings. Tell me the URL when it's ready.
+> Run `npx @mcpware/claude-code-organizer` — it's a dashboard for managing all Claude Code resources. Tell me the URL when it's ready.
 
-Opens a dashboard at `http://localhost:3847`. Works with your real `~/.claude/` directory.
+Opens a dashboard at `http://localhost:3847` that works directly with your real `~/.claude/` directory. Next time, just type `/cco` in Claude Code to reopen.
 
 ## What It Manages
 
