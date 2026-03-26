@@ -87,6 +87,8 @@ The fuller the context, the less accurate Claude becomes — an effect known as 
 - **File change diffs** — linter changes a file you read? Full diff injected as hidden system-reminder
 - **Conversation history** — your messages + Claude's responses + all tool results resent on every API call
 
+The Context Budget panel shows you exactly what's loaded and where it comes from — current scope or inherited from parent scopes — with per-item token counts. Right next to it is the scope management tree where you can drag-and-drop items between scopes. The workflow: check your token budget, spot duplicates or wrong-scope items, clean them up, refresh — repeat until your initial load is lean. Move things to the right scope so you don't end up creating the same skill twice across different projects.
+
 ---
 
 ## Comparison
