@@ -162,6 +162,14 @@ async function resolveEncodedProjectPath(encoded) {
   let currentPath = "/";
   let i = 0;
 
+  // Windows: encoded paths look like "c--Users-user-Desktop-project"
+  // The drive letter "c" becomes the first segment, followed by empty string from "--"
+  // Need to detect and convert to "C:\"
+  if (platform() === "win32" && segments.length >= 2 && segments[0].length === 1 && segments[1] === "") {
+    currentPath = segments[0].toUpperCase() + ":\\";
+    i = 2; // skip drive letter + empty segment
+  }
+
   while (i < segments.length) {
     // Try longest match first: join remaining segments and check if directory exists
     let matched = false;
