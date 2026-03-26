@@ -911,47 +911,30 @@ function setupCcActions() {
 }
 
 function setupExport() {
-  const modal = document.getElementById("exportModal");
-  const input = document.getElementById("exportPath");
-  const confirmBtn = document.getElementById("exportConfirm");
-  const cancelBtn = document.getElementById("exportCancel");
+  const btn = document.getElementById("exportBtn");
+  let exporting = false;
 
-  document.getElementById("exportBtn").addEventListener("click", () => {
-    input.value = input.value || "/tmp";
-    modal.classList.remove("hidden");
-    input.focus();
-    input.select();
-  });
-
-  cancelBtn.addEventListener("click", () => modal.classList.add("hidden"));
-  modal.addEventListener("click", (e) => { if (e.target === modal) modal.classList.add("hidden"); });
-
-  confirmBtn.addEventListener("click", async () => {
-    const exportDir = input.value.trim();
-    if (!exportDir || !exportDir.startsWith("/")) {
-      toast("Please enter an absolute path", true);
-      return;
-    }
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = "Exporting...";
+  btn.addEventListener("click", async () => {
+    if (exporting) return;
+    exporting = true;
+    btn.textContent = "📦 Exporting...";
     try {
       const raw = await fetch("/api/export", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ exportDir }),
+        body: JSON.stringify({ exportDir: null }), // server uses default ~/.claude/exports/
       });
       const res = await raw.json();
       if (res.ok) {
-        modal.classList.add("hidden");
-        toast(`${res.copied} items exported to ${res.path}`);
+        toast(`${res.copied} items exported to ${res.path}`, false, null, true);
       } else {
         toast(res.error || "Export failed", true);
       }
     } catch {
       toast("Export failed", true);
     }
-    confirmBtn.disabled = false;
-    confirmBtn.textContent = "Export";
+    exporting = false;
+    btn.textContent = "📦 Export All";
   });
 }
 
@@ -1947,7 +1930,7 @@ function updateBulkBar() {
   document.getElementById("bulkCount").textContent = `${count} selected`;
 }
 
-function toast(msg, isError = false, undoFn = null) {
+function toast(msg, isError = false, undoFn = null, persistent = false) {
   const el = document.getElementById("toast");
   const msgEl = document.getElementById("toastMsg");
   if (toastTimer) clearTimeout(toastTimer);
@@ -1960,6 +1943,10 @@ function toast(msg, isError = false, undoFn = null) {
       await undoFn();
     };
     toastTimer = setTimeout(() => el.classList.add("hidden"), 8000);
+  } else if (persistent) {
+    msgEl.innerHTML = `${esc(msg)} <button class="toast-close" id="toastClose">✕</button>`;
+    el.className = isError ? "toast error" : "toast";
+    document.getElementById("toastClose").onclick = () => el.classList.add("hidden");
   } else {
     msgEl.textContent = msg;
     el.className = isError ? "toast error" : "toast";

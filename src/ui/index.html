@@ -25,6 +25,7 @@
 
       <div class="sidebar-tree" id="sidebarTree"></div>
       <div class="sidebar-footer">
+        <button class="sidebar-export-btn" id="exportBtn" type="button">📦 Export All</button>
         <a href="https://github.com/mcpware/claude-code-organizer" target="_blank" rel="noopener">⭐ Star me on GitHub</a>
         <a href="https://github.com/mcpware/claude-code-organizer/issues" target="_blank" rel="noopener">💡 Bug? Feedback? Same-day fix promise</a>
         <span class="sidebar-footer-hint">Type <code>/cco</code> in Claude Code to reopen</span>
@@ -40,7 +41,6 @@
           <span class="content-scope-tag" id="contentScopeTag">global</span>
           <div class="content-inherit" id="contentInherit"></div>
           <button class="export-btn ctx-budget-btn" id="ctxBudgetBtn" type="button" title="Show context token budget for this scope">Context Budget</button>
-          <button class="export-btn" id="exportBtn" type="button" title="Export all configs to a folder">Export</button>
         </div>
         <div class="filter-bar" id="pills"></div>
       </div>
@@ -138,21 +138,7 @@
     </div>
   </div>
 
-  <div class="modal-bg hidden" id="exportModal">
-    <div class="modal">
-      <h3>Export Backup</h3>
-      <div class="modal-sub">Copy all scanned configs to a folder</div>
-      <div class="export-input-row">
-        <label class="export-label" for="exportPath">Export to:</label>
-        <input class="export-input" id="exportPath" type="text" placeholder="/home/user/backups" />
-      </div>
-      <div class="export-hint">A timestamped folder will be created inside this path</div>
-      <div class="modal-btns">
-        <button class="d-btn d-btn-open" id="exportCancel" type="button">Cancel</button>
-        <button class="d-btn d-btn-move" id="exportConfirm" type="button">Export</button>
-      </div>
-    </div>
-  </div>
+  <!-- Export modal removed — export goes directly to ~/.claude/exports/ -->
 
   <div class="modal-bg hidden" id="dragConfirmModal">
     <div class="modal">

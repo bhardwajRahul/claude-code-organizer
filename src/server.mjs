@@ -423,11 +423,39 @@ async function handleRequest(req, res) {
     }
   }
 
+  // GET /api/browse-dirs?path=... — list subdirectories for folder picker
+  if (path === "/api/browse-dirs" && req.method === "GET") {
+    const dirPath = url.searchParams.get("path") || HOME;
+    const resolved = resolve(dirPath);
+
+    // Only allow browsing under HOME for safety
+    if (!resolved.startsWith(HOME) && resolved !== HOME) {
+      return json(res, { ok: false, error: "Cannot browse outside HOME directory" }, 400);
+    }
+
+    try {
+      const { readdir: rd, stat: st } = await import("node:fs/promises");
+      const entries = await rd(resolved, { withFileTypes: true });
+      const dirs = [];
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name.startsWith(".")) continue; // skip hidden
+        dirs.push(entry.name);
+      }
+      dirs.sort();
+      return json(res, { ok: true, path: resolved, dirs, parent: resolve(resolved, "..") });
+    } catch {
+      return json(res, { ok: false, error: "Cannot read directory" }, 400);
+    }
+  }
+
   // POST /api/export — export all scanned items to a folder
   if (path === "/api/export" && req.method === "POST") {
-    const { exportDir } = await readBody(req);
-    if (!exportDir || !exportDir.startsWith("/")) {
-      return json(res, { ok: false, error: "Missing or invalid exportDir (must be absolute path)" }, 400);
+    let { exportDir } = await readBody(req);
+    // Default to ~/.claude/exports/ if no path provided
+    if (!exportDir) exportDir = join(CLAUDE_DIR, "exports");
+    if (!exportDir.startsWith("/")) {
+      return json(res, { ok: false, error: "Invalid exportDir (must be absolute path)" }, 400);
     }
 
     try {
