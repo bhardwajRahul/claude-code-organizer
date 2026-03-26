@@ -18,13 +18,36 @@ English | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [�
 
 ## The Problem
 
+Two things happen silently every time you use Claude Code — and neither one is visible to you.
+
+### Problem 1: You have no idea how much context is already used
+
+This is a real project directory after two weeks of use:
+
+![Context Budget](docs/democontextbudged.png)
+
+**If you start a Claude Code session under this directory, 70.9K tokens are already loaded before you start any conversation.** That's 35.4% of your 200K context window — gone before you type a single character. Estimated cost just for this overhead: $1.06 USD per session on Opus, $0.21 on Sonnet.
+
+The remaining 64.5% is shared between your messages, Claude's responses, and tool results before context compression kicks in. The fuller the context, the less accurate Claude becomes — an effect known as **context rot**.
+
+Where does 70.9K come from? It includes everything we can **measure offline** — your CLAUDE.md, memories, skills, MCP server definitions, settings, hooks, rules, commands, and agents — tokenized per-item. Plus an **estimated system overhead** (~21K tokens) for the immutable scaffold Claude Code loads on every API call: the system prompt, 23+ built-in tool definitions, and MCP tool schemas.
+
+And that's just what we can count. It does **not** include **runtime injections** — tokens Claude Code silently adds during a session:
+
+- **Rule re-injection** — all your rule files are re-injected into context after every tool call. After ~30 tool calls, this alone can consume ~46% of your context window
+- **File change diffs** — when a file you've read or written is modified externally (e.g. by a linter), the full diff is injected as a hidden system-reminder
+- **System reminders** — malware warnings, token nudges, and other hidden injections appended to messages
+- **Conversation history** — your messages, Claude's responses, and all tool results are resent on every API call
+
+Your actual mid-session usage is significantly higher than 70.9K. You just can't see it.
+
+### Problem 2: Your context is contaminated
+
 Claude Code silently creates memories, skills, MCP configs, commands, agents, and rules every time you work — and dumps them into whatever scope matches your current directory. A preference you wanted everywhere? Trapped in one project. A deploy skill that belongs to one repo? Leaked into global, contaminating every other project.
 
-**This isn't just messy — it hurts your AI's performance.** Every session, Claude loads all configs from the current scope plus everything inherited from parent scopes into your context window. Wrong-scope items = wasted tokens, polluted context, and lower accuracy. A Python pipeline skill sitting in global gets loaded into your React frontend session. Duplicate MCP entries initialize the same server twice. Stale memories contradict your current instructions.
+A Python pipeline skill sitting in global gets loaded into your React frontend session. Duplicate MCP entries initialize the same server twice. Stale memories from two weeks ago contradict your current instructions. Every wrong-scope item wastes tokens **and** degrades accuracy.
 
-### "Just ask Claude to fix it"
-
-You could ask Claude Code to manage its own config. But you'll go back and forth — `ls` one directory, `cat` each file, try to piece together the full picture from fragments of text output. **There's no command that shows the entire tree** across all scopes, all items, all inheritance at once.
+You have no way to see the full picture. No command shows all items across all scopes, all inheritance, all at once.
 
 ### The fix: a visual dashboard
 
@@ -32,17 +55,17 @@ You could ask Claude Code to manage its own config. But you'll go back and forth
 npx @mcpware/claude-code-organizer
 ```
 
-One command. See everything Claude has stored — organized by scope hierarchy. **Drag items between scopes.** Delete stale memories. Find duplicates. Take control of what actually influences Claude's behavior.
+One command. See everything Claude has stored — organized by scope hierarchy. **See your token budget before you start.** Drag items between scopes. Delete stale memories. Find duplicates. Take control of what actually influences Claude's behavior.
 
-> **First run auto-installs a `/cco` skill** — after that, just type `/cco` in any Claude Code session to open the dashboard. No need to remember the npx command.
+> **First run auto-installs a `/cco` skill** — after that, just type `/cco` in any Claude Code session to open the dashboard.
 
-### Example: Project → Global
+### Example: Find what's eating your tokens
 
-You told Claude "I prefer TypeScript + ESM" while inside a project, but that preference applies everywhere. Open the dashboard, drag that memory from Project to Global. **Done. One drag.**
+Open the dashboard, click **Context Budget**, switch to **By Tokens** — the biggest consumers are at the top. A 2.4K token CLAUDE.md you forgot about? A skill duplicated across three scopes? Now you see it. Clean it up, save 10-20% of your context window.
 
-### Example: Global → Project
+### Example: Fix scope contamination
 
-A deploy skill sitting in global only makes sense for one repo. Drag it into that Project scope — other projects won't see it anymore.
+You told Claude "I prefer TypeScript + ESM" while inside a project, but that preference applies everywhere. Drag that memory from Project to Global. **Done. One drag.** A deploy skill sitting in global only makes sense for one repo? Drag it into that Project scope — other projects won't see it anymore.
 
 ### Example: Delete stale memories
 
@@ -91,51 +114,6 @@ We analyzed the source code of every Claude Code tool we could find — analytic
 - **Cross-device support** — Automatic copy+delete fallback when rename fails across filesystems (Docker/WSL)
 - **100+ E2E tests** — Playwright test suite covering filesystem verification, security (path traversal, malformed input), context budget, and all 11 categories
 
-## Why a Visual Dashboard?
-
-Claude Code can already list and move files via CLI — but you're stuck playing 20 questions with your own config. The dashboard gives you **full visibility in one glance:**
-
-| What you need | Ask Claude | Visual Dashboard |
-|---------------|:-----------:|:----------------:|
-| **See everything at once** across all scopes | `ls` one directory at a time, piece it together | Scope tree, one glance |
-| **What's loaded in my current project?** | Run multiple commands, hope you got them all | Open project → see full inheritance chain |
-| **Move items between scopes** | Find encoded paths, `mv` manually | Drag-and-drop with confirmation |
-| **Read config content** | `cat` each file one by one | Click → side panel |
-| **Find duplicates / stale items** | `grep` across cryptic directories | Search + filter by category |
-| **Clean up unused memories** | Figure out which files to delete | Browse, read, delete in-place |
-
-## Context Budget
-
-This is a real project directory. After two weeks of use:
-
-![Context Budget](docs/democontextbudged.png)
-
-> **If you start a Claude Code session under this directory, 70.9K tokens are already loaded before you start any conversation.** Estimated cost per session: $1.06 USD (Opus) · $0.21 USD (Sonnet).
->
-> The remaining 64.5% is shared between your messages, Claude's responses, and tool results before context compression kicks in. The fuller the context, the less accurate Claude becomes — an effect known as **context rot**.
-
-### Where does 70.9K come from?
-
-The number includes everything we can **measure offline** — your CLAUDE.md, memories, skills, MCP server definitions, settings, hooks, rules, commands, and agents — tokenized per-item with ~99.8% accuracy. It also includes an **estimated system overhead** (~21K tokens) for the immutable scaffold that Claude Code loads on every API call: the system prompt, built-in tool definitions, and MCP tool schemas.
-
-What it does **not** include is **runtime injections** — additional tokens that Claude Code silently injects during a session:
-
-- **Rule re-injection** — all your rule files are re-injected into context after every tool call. After ~30 tool calls, this alone can consume ~46% of your context window
-- **File change diffs** — when a file you've read or written is modified externally (e.g. by a linter or formatter), the full diff is injected as a hidden system-reminder
-- **System reminders** — malware warnings, token usage nudges, and other hidden injections appended to every message
-- **Conversation history** — your messages, Claude's responses, and all tool results are resent on every API call
-
-Your actual mid-session token usage will be significantly higher than the pre-session estimate.
-
-### What you can do with Context Budget
-
-Click **Context Budget** in the scope header. Three views:
-
-- **By Scope** — collapsible hierarchy showing Current Scope → each inherited parent scope → System Overhead. See which scope is eating the most tokens
-- **By Category** — all items grouped by type (skills, memories, config, MCP, hooks...) across all scopes. Instantly spot duplicates — same skill inherited from two scopes
-- **By Tokens** — flat list sorted by token count, biggest first. Find the items worth optimizing
-
-Every item shows its source scope, so you know exactly where to go to clean up.
 
 ## Quick Start
 
