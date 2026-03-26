@@ -20,7 +20,55 @@ English | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [�
 
 Two things happen silently every time you use Claude Code — and neither one is visible to you.
 
-### Problem 1: You have no idea how much context is already used
+### Problem 1: Where you put things matters — and Claude puts them in the wrong place
+
+Claude Code has a scope hierarchy: **Global → Workspace → Project**. Anything in Global loads into every session on your machine. Anything in a Project scope only loads when you're in that directory. Where a memory, skill, or MCP server sits determines which sessions it affects.
+
+The problem: **Claude doesn't care about scope when it creates things.** It dumps everything into whatever scope matches your current directory. Over time, this turns into a mess:
+
+**Skills in the wrong scope affect the wrong projects:**
+- You build a deploy skill while working in your backend repo. It lands in that project's scope. But you want it everywhere — it should be in Global. Without moving it, your other projects can't see it.
+- A Python-specific testing skill sitting in Global gets loaded into every React frontend session. It wastes tokens and confuses Claude with irrelevant instructions.
+
+**Memories pile up and duplicate:**
+- You tell Claude "always use ESM imports" while inside a project. That memory is trapped in that project scope — your other projects don't get it.
+- Claude creates 3 separate memories about Slack updates, all saying the same thing. Each one loads every session.
+
+**MCP servers silently reinstall across scopes:**
+
+![Duplicate MCP Servers](docs/reloaded%20mcp%20form%20diff%20scope.png)
+
+Teams installed twice, Gmail three times, Playwright three times. You configured them in one scope, Claude reinstalled them in another. Each duplicate loads independently.
+
+**You can manage this with CLI commands** — `ls` one directory at a time, `cat` each file, `rm` what you don't need, manually `mv` to the right scope. But there's no single command that shows you the full picture: all items, all scopes, all inheritance, at once.
+
+### The fix: a visual config manager
+
+```bash
+npx @mcpware/claude-code-organizer
+```
+
+Think of it like a file manager for your Claude Code configuration. You can do everything in terminal too, but sometimes you need to see the whole tree to understand what's going on.
+
+> **First run auto-installs a `/cco` skill** — after that, just type `/cco` in any Claude Code session to open the dashboard.
+
+### Example: Move a skill to the right scope
+
+You built a `deploy` skill while working in `~/myapp`. It ended up in that project's scope — only visible when you're in `~/myapp`. But it should be Global so all your projects can use it. Open the dashboard, find the skill, drag it from Project to Global. **Done. One drag.** Now every project on your machine can use it.
+
+### Example: See what a project actually inherits
+
+You open a deeply nested project and Claude is behaving weirdly — following instructions you don't remember setting. Click the project in the dashboard. You see its own items, plus everything inherited from parent scopes: workspace-level memories, global skills, MCP servers from two levels up. Now you know exactly what's influencing Claude in this directory.
+
+### Example: Find and clean up duplicates
+
+Claude created the same memory in 3 scopes. An MCP server got installed in both Global and your project. A skill exists at both workspace and project level. Switch to **By Category** view — all items of the same type across all scopes are grouped together. Duplicates jump out immediately. Preview each one, decide which to keep, delete the rest.
+
+### Example: Understand your token budget
+
+Click **Context Budget** to see exactly what gets loaded before you start a conversation — broken down into **Always Loaded** (CLAUDE.md, memories, skills, rules) vs **Deferred** (MCP tool schemas loaded on-demand). Sort by token count to find the biggest consumers. Toggle between 200K and 1M context window to see the impact on your specific plan.
+
+### Problem 2: You have no idea how much context is already used
 
 This is a real project directory after two weeks of use:
 
@@ -30,7 +78,7 @@ This is a real project directory after two weeks of use:
 
 The Context Budget panel breaks this down:
 
-- **Always Loaded** — CLAUDE.md, MEMORY.md (first 200 lines), skill descriptions, rules, system prompt and tools. These are in your context every single request.
+- **Always Loaded** — CLAUDE.md, MEMORY.md index (first 200 lines), skill descriptions, rules, system prompt and tools. These are in your context every single request.
 - **Deferred** — MCP tool schemas that Claude loads on-demand via ToolSearch. Not in context until Claude needs a specific tool — but they add up fast if you have many MCP servers.
 
 The fuller the context, the less accurate Claude becomes — an effect known as **context rot**. And these numbers only cover what we can measure offline. During a session, Claude Code silently adds more:
@@ -38,44 +86,6 @@ The fuller the context, the less accurate Claude becomes — an effect known as 
 - **Rule re-injection** — all rule files re-injected after every tool call. After ~30 calls, this alone can consume ~46% of context
 - **File change diffs** — linter changes a file you read? Full diff injected as hidden system-reminder
 - **Conversation history** — your messages + Claude's responses + all tool results resent on every API call
-
-### Problem 2: Your context is contaminated
-
-Claude Code silently creates memories, skills, MCP configs, commands, agents, and rules every time you work — and dumps them into whatever scope matches your current directory. A preference you wanted everywhere? Trapped in one project. A deploy skill that belongs to one repo? Leaked into global, contaminating every other project.
-
-It also silently re-installs MCP servers when you configure them in different scopes. You don't notice until you look:
-
-![Duplicate MCP Servers](docs/reloaded%20mcp%20form%20diff%20scope.png)
-
-Teams installed twice, Gmail three times, Playwright three times — each copy wasting tokens every session. The scope labels (`Global` / `nicole`) show exactly where each duplicate lives, so you can decide which to keep and which to remove.
-
-The same happens with memories. Claude creates duplicates without asking — three separate memories about Slack updates, all saying essentially the same thing, each one loaded into every session.
-
-A Python pipeline skill sitting in global gets loaded into your React frontend session. Stale memories from two weeks ago contradict your current instructions. Every wrong-scope item wastes tokens **and** degrades accuracy.
-
-Claude Code has `/context` to show your token usage inside a session — but by then you're already burning tokens, and it's read-only. There's no way to manage the mess from outside.
-
-### The fix: pre-session context governance
-
-```bash
-npx @mcpware/claude-code-organizer
-```
-
-One command. **Before you start a session**, see exactly what will be loaded, where each item comes from (which scope), and how much it costs. Preview any item's content. Drag items between scopes. Delete duplicates and stale configs. `/context` tells you "you're using 42% right now" — this tells you "here's exactly why, and here's how to fix it before you start."
-
-> **First run auto-installs a `/cco` skill** — after that, just type `/cco` in any Claude Code session to open the dashboard.
-
-### Example: Find what's eating your tokens
-
-Open the dashboard, click **Context Budget**, switch to **By Tokens** — the biggest consumers are at the top. A 2.4K token CLAUDE.md you forgot about? A skill duplicated across three scopes? Now you see it. Clean it up, save 10-20% of your context window.
-
-### Example: Fix scope contamination
-
-You told Claude "I prefer TypeScript + ESM" while inside a project, but that preference applies everywhere. Drag that memory from Project to Global. **Done. One drag.** A deploy skill sitting in global only makes sense for one repo? Drag it into that Project scope — other projects won't see it anymore.
-
-### Example: Delete stale and duplicate items
-
-Claude auto-creates memories, skills, and MCP server configs from things you said or did. Some become outdated, others get duplicated across scopes — yet all of them still load into every session, wasting tokens. Browse, read, delete. **You decide what Claude loads — not Claude.**
 
 ---
 
