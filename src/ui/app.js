@@ -1028,13 +1028,13 @@ function renderContextBudget(budget) {
     <span class="ctx-pct">(${budget.percentUsed}%)</span>
     <span class="ctx-badge ctx-badge-${budget.method}">${budget.method}</span>
     <div class="ctx-budget-explain">If you start a Claude Code session under this directory, <b>${formatTokens(budget.total)}</b> are already loaded before you start any conversation. Est. cost per session: <b>$${costOpus} USD</b> <span class="ctx-cost-label">Opus</span> · <b>$${costSonnet} USD</b> <span class="ctx-cost-label">Sonnet</span>
-    <br><br>The remaining <b>${(100 - budget.percentUsed).toFixed(1)}%</b> is shared between your messages, Claude's responses, and tool results before <a href="https://docs.anthropic.com/en/docs/build-with-claude/context-windows" target="_blank" rel="noopener">context compression</a> kicks in. The fuller the context, the less accurate Claude becomes — a well-documented effect known as <a href="https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents" target="_blank" rel="noopener">context rot</a>.</div>`;
+    <br><br>The remaining <b>${(100 - budget.percentUsed).toFixed(1)}%</b> is shared between your messages, Claude's responses, and tool results before context compression kicks in. The fuller the context, the less accurate Claude becomes — an effect known as context rot.</div>`;
 
   // Update note with method info
   const noteEl = document.getElementById("ctxBudgetNote");
   noteEl.innerHTML = budget.method === "measured"
-    ? `Token counts via <b>ai-tokenizer</b> (99.79% accuracy). System overhead based on <a href="https://github.com/anthropics/claude-code/issues/30103" target="_blank" rel="noopener">GitHub #30103</a>.`
-    : `Token counts estimated (bytes/4). Install <code>ai-tokenizer</code> for 99.79% accuracy. System overhead based on <a href="https://github.com/anthropics/claude-code/issues/30103" target="_blank" rel="noopener">GitHub #30103</a>.`;
+    ? `Token counts are measured with ~99.8% accuracy. System overhead is estimated from known baselines.`
+    : `Token counts are estimated. Install <code>ai-tokenizer</code> for higher accuracy. System overhead is estimated from known baselines.`;
 
   renderBudgetBody();
 }
@@ -1260,9 +1260,9 @@ function renderSystemOverhead(budget) {
       <span class="ctx-section-total">unknown</span>
     </div>
     <div class="ctx-runtime-note">The numbers above only reflect what is loaded at session start. During a session, Claude Code injects additional tokens that we cannot measure offline:<ul class="ctx-runtime-list">
-      <li><b>Rule re-injection</b> — all rule files are re-injected after every tool call. After ~30 tool calls this alone can consume ~46% of context (<a href="https://github.com/anthropics/claude-code/issues/32057" target="_blank" rel="noopener">#32057</a>)</li>
+      <li><b>Rule re-injection</b> — all rule files are re-injected after every tool call. After ~30 tool calls this alone can consume ~46% of context</li>
       <li><b>File change diffs</b> — when files you've read or written are modified externally (e.g. by a linter), the full diff is injected as a hidden system-reminder</li>
-      <li><b>System reminders</b> — malware warnings, token usage nudges, and other hidden injections on every message (<a href="https://github.com/anthropics/claude-code/issues/17601" target="_blank" rel="noopener">#17601</a>)</li>
+      <li><b>System reminders</b> — malware warnings, token usage nudges, and other hidden injections on every message</li>
       <li><b>Conversation history</b> — your messages + Claude's responses + all tool results are resent on every API call</li>
     </ul>Your actual token usage mid-session will be significantly higher than the pre-session estimate shown above.</div>
   </div>`;
