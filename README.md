@@ -72,10 +72,6 @@ Your context window is not 200K tokens. It's 200K minus everything Claude pre-lo
 
 **~25K tokens always loaded (12.5% of 200K), up to ~121K deferred.** About 72% of your context window left before you type — and shrinks as Claude loads MCP tools during the session.
 
-![Duplicate MCP Servers](docs/reloaded%20mcp%20form%20diff%20scope.png)
-
-Teams installed twice, Gmail three times, Playwright three times. You configured them in one scope, Claude reinstalled them in another. Each duplicate eats tokens independently.
-
 - Per-item token counts (ai-tokenizer ~99.8% accuracy)
 - Always-loaded vs deferred breakdown
 - @import expansion (sees what CLAUDE.md actually pulls in)
@@ -96,7 +92,11 @@ Here's the problem: **Claude creates memories and skills in whatever directory y
 
 Same with skills. You build a deploy skill in your backend repo — it lands in that project's scope. Your other projects can't see it. You end up recreating it everywhere.
 
-**CCO shows the full scope tree.** You can see exactly which memories, skills, and MCP servers affect which projects — then drag them to the right scope:
+**CCO shows the full scope tree.** You can see exactly which memories, skills, and MCP servers affect which projects — then drag them to the right scope.
+
+![Duplicate MCP Servers](docs/reloaded%20mcp%20form%20diff%20scope.png)
+
+Teams installed twice, Gmail three times, Playwright three times. You configured them in one scope, Claude reinstalled them in another.
 
 - **Move anything with drag-and-drop** — Drag a memory from Project to Global. One gesture. Now every project on your machine has it.
 - **Find duplicates instantly** — All items grouped by category across scopes. Three copies of the same memory? Delete the extras.
