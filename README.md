@@ -41,11 +41,15 @@ Other tools solve these one at a time. **CCO solves them in one loop:**
 
 **The difference from standalone scanners:** When CCO finds something, you click the finding and land on the MCP server entry in the scope tree. Delete it, move it, or inspect its config — without switching tools.
 
-```bash
-npx @mcpware/claude-code-organizer
+**Get started — paste this into Claude Code:**
+
+```
+Run npx @mcpware/claude-code-organizer and tell me the URL when it's ready.
 ```
 
-> **First run auto-installs a `/cco` skill** — after that, just type `/cco` in any Claude Code session to reopen.
+Or run directly: `npx @mcpware/claude-code-organizer`
+
+> First run auto-installs a `/cco` skill — after that, just type `/cco` in any Claude Code session to reopen.
 
 ## What Makes This Different
 
@@ -102,31 +106,6 @@ CCO connects to every MCP server, retrieves actual tool definitions, and runs th
 - **SHA256 hash baselines** — if a server's tools change between scans, you see a CHANGED badge immediately
 - **NEW / CHANGED / UNREACHABLE** status badges on every MCP item
 
-
-## Quick Start
-
-### Option 1: Paste into Claude Code (recommended)
-
-```
-Run npx @mcpware/claude-code-organizer and tell me the URL when it's ready.
-```
-
-Claude will install and launch the dashboard for you. First run auto-installs a `/cco` skill — after that, just type `/cco` in any session to reopen.
-
-### Option 2: npx (from terminal)
-
-```bash
-npx @mcpware/claude-code-organizer
-```
-
-### Option 3: Global install
-
-```bash
-npm install -g @mcpware/claude-code-organizer
-claude-code-organizer
-```
-
-Opens at `http://localhost:3847`. The `/cco` skill is auto-installed on first run.
 
 ## What It Manages
 
