@@ -6,16 +6,20 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/claude-code-organizer)](https://github.com/mcpware/claude-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
+[![Tests](https://img.shields.io/badge/tests-138%20passing-brightgreen)](https://github.com/mcpware/claude-code-organizer)
+[![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/claude-code-organizer)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/claude-code-organizer)
 English | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [廣東話](README.zh-HK.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Bahasa Indonesia](README.id.md) | [Italiano](README.it.md) | [Português](README.pt-BR.md) | [Türkçe](README.tr.md) | [Tiếng Việt](README.vi.md) | [ไทย](README.th.md)
 
 **One dashboard to see everything Claude Code loads into context — scan for poisoned MCP servers, reclaim wasted tokens, and fix wrong-scope configs. All without leaving the window.**
 
-> 100+ stars in 5 days. Built by a CS dropout who found 140 invisible config files controlling Claude and decided no one should have to `cat` each one. First open source project — thank you to everyone who starred, tested, and reported issues.
+> **Privacy:** CCO reads your local `~/.claude/` directory only. No API keys accessed, no conversation content read, no data sent externally. Zero telemetry.
 
 ![Claude Code Organizer Demo](docs/demo.gif)
 
-<sub>Demo video recorded by AI automatically using [Pagecast](https://github.com/mcpware/pagecast)</sub>
+<sub>138 E2E tests | Zero dependencies | Demo recorded by AI using [Pagecast](https://github.com/mcpware/pagecast)</sub>
+
+> 100+ stars in 5 days. Built by a CS dropout who found 140 invisible config files controlling Claude and decided no one should have to `cat` each one. First open source project — thank you to everyone who starred, tested, and reported issues.
 
 ## The Loop: Scan, Find, Fix
 
@@ -156,6 +160,8 @@ CCO connects to every MCP server, retrieves actual tool definitions, and runs th
 | **Security Scanner** | ✅ Done | 60 patterns, 9 deobfuscation techniques, rug-pull detection, NEW/CHANGED/UNREACHABLE badges |
 | **Config Health Score** | 📋 Planned | Per-project health score with actionable recommendations |
 | **Cross-Harness Portability** | 📋 Planned | Convert skills/configs between Claude Code ↔ Cursor ↔ Codex ↔ Gemini CLI |
+| **CLI / JSON Output** | 📋 Planned | Run scans headless for CI/CD pipelines — `cco scan --json` |
+| **Team Config Baselines** | 📋 Planned | Define and enforce team-wide MCP/skill standards across developers |
 | **Cost Tracker** | 💡 Exploring | Track token usage and cost per session, per project |
 | **Relationship Graph** | 💡 Exploring | Visual dependency graph showing how skills, hooks, and MCP servers connect |
 
