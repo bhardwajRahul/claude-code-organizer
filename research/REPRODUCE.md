@@ -4,8 +4,13 @@ End-to-end reproducible record of the investigation + benchmarks behind
 `activation-probe-tool-poisoning.md`. Written so an independent agent (e.g. Codex)
 can review the reasoning, re-run every experiment, and confirm (or refute) each number.
 
-**TL;DR of the scientific claim being reproduced:**
-> Text-level detectors (incl. Snyk's shipped `deberta-v3-base-prompt-injection-v2`) catch 0–20 % of MCP tool poisoning. A raw-activation probe hits 96–99 % in-distribution but collapses cross-family (14 % on held-out MCPTox). **SAE-encoding the same activations rescues cross-family generalization (14 % → 84 %)**, and an ablation shows this win does **not** depend on the obvious additive-framing confound. Everything runs on open tooling (GPT-2 + open SAEs), zero Anthropic access.
+**TL;DR of the scientific claims being reproduced:**
+> 1. Text-level detectors (incl. Snyk's shipped `deberta-v3-base-prompt-injection-v2`) catch **0–20 %** of MCP tool poisoning.
+> 2. Activation probes hit **96–99 %** in-distribution. Cross-family generalization (train one attack family, test a structurally-distinct one) is **strong on capable models** (raw recall: Pythia-70m 88 %, Gemma-2-2b 77 %) but can be poor on a weak model/layer (GPT-2 layer-7: raw 14 %).
+> 3. **SAE-encoding gives a consistent but model-dependent cross-family lift** (Gemma +8, Pythia +12 recall; never hurts on the cross-family direction). The dramatic GPT-2 result (14 % → 84 %) is an **outlier** driven by GPT-2's unusually poor raw cross-family transfer — it does NOT generalize as a "+70-point SAE rescue" on modern models. An ablation shows the GPT-2 SAE win does not depend on the additive-framing confound.
+> 4. Training only on blatant attacks (MCPTox) never transfers to subtle ones (~0 % everywhere) — **diverse, subtle training is required.**
+>
+> Everything runs on open tooling (GPT-2 / Pythia / Gemma-2-2b + open SAEs), zero proprietary access. **Do not headline "14 % → 84 %"** — it is the high end of a model-dependent effect.
 
 ---
 
@@ -14,8 +19,8 @@ can review the reasoning, re-run every experiment, and confirm (or refute) each 
 Verify these independently:
 1. **Snyk's real mechanism** is a text classifier, not activations (§2 step 3).
 2. **deberta ≈ 0–20 % recall on tool poisoning** (§4 exp 2).
-3. **Raw probe collapses cross-style; SAE rescues cross-family** (§4 exp 4,7,8).
-4. **Ablation refutes the additive-confound worry** (§4 exp 11).
+3. **Cross-family generalization is model-dependent; SAE gives a small consistent lift, NOT a universal rescue** — the GPT-2 14 %→84 % is an outlier (§4 exp 6,7,12,13).
+4. **Ablation refutes the additive-confound worry** for the GPT-2 result (§4 exp 11).
 
 Expected nondeterminism: seed 42 is set everywhere, but `torch`/`transformers` kernels + HF model snapshots can shift metrics by ~±1–2 pts. Neuronpedia auto-interp text may change over time. Conclusions (orders of magnitude, sign of effects) should hold; exact decimals may drift slightly.
 
@@ -127,6 +132,26 @@ Cross-family (hand→MCPTox) recall: baseline **84.5 %** → ablate #8063 **84.7
 **exp 10 — adversarial camouflage-suffix evasion** (`exp_adversarial_evasion.py`)
 Probe catches 146/146 originals; with benign "read-only" suffixes appended, worst-case **0/146 = 0 % evasion** (deberta's recall instead *rises*, reacting to suffix keywords). Caveat: gradient-optimized attack untested.
 
+**exp 11 — greedy black-box adversarial suffix** (`exp_adversarial_gcg.py`)
+Optimises an appended suffix per poison item (clean-token pool, greedy coordinate search) to minimise the probe's poison-prob. Result: **1/20 = 5 % evasion**, mean poison-prob after attack 0.994 (vs naive fixed-suffix 0 %). A tractable lower bound on robustness; full white-box GCG could be stronger.
+
+**exp 12 — cross-model confirmation, Pythia-70m** (`exp_sae_crossmodel_pythia.py`)
+Different family (EleutherAI GPT-NeoX) + open residual SAE (blocks.2). Dir A ~0 %. Dir B (hand→MCPTox): **raw rec 88.0 % → SAE 100 %** (F1 75→77). → raw already generalizes cross-family here; SAE adds recall but ~flat F1. The GPT-2 collapse does NOT replicate.
+
+**exp 13 — cross-model adjudication, Gemma-2-2b** (`exp_sae_gemma_crossfamily.py`)
+Modern model + Gemma Scope canonical SAE at layer 15 (depth 0.58, matched to GPT-2 blocks.7). HF loader with `low_cpu_mem_usage`+bf16 (transformer_lens doubled memory and OOM-killed; see note). Dir A ~0 %. Dir B: **raw 77.0 % → SAE 85.0 %** recall (F1 78.6 → 81.0). → SAE gives a modest +8 lift; raw already strong. Confirms the +70 GPT-2 gap is model-specific.
+
+> Memory note for exp 13: load gemma-2-2b via HF `AutoModel(..., low_cpu_mem_usage=True, torch_dtype=bfloat16)`, NOT `transformer_lens.HookedTransformer.from_pretrained` (the latter transiently doubles weights → OOM/SIGKILL on a 30 GB box). Gemma Scope `layer_15/hook_resid_post` == HF `hidden_states[16]`.
+
+### Cross-family (direction B) across model families — the adjudication
+| model (layer/depth) | RAW recall | SAE recall | SAE − RAW |
+|---|---|---|---|
+| GPT-2 (7/12, 0.58) | 14 % | 84 % | +70 (outlier) |
+| Pythia-70m (2/6, 0.33) | 88 % | 100 % | +12 (F1 flat) |
+| Gemma-2-2b (15/26, 0.58) | 77 % | 85 % | +8 |
+
+Honest reading: SAE consistently ≥ raw on the cross-family direction (never hurts), but the magnitude is small on capable models; GPT-2's +70 reflects its unusually poor raw transfer at that layer, not a universal SAE advantage.
+
 ---
 
 ## 5. Consolidated headline table
@@ -135,8 +160,9 @@ Probe catches 146/146 originals; with benign "read-only" suffixes appended, wors
 |---|---|---|---|
 | tool poisoning recall (deberta zero-shot) | 0–20 % | — | — |
 | in-distribution (MCPTox / handcrafted) | — | 96–99 % | 93–99 % |
-| cross-family (held-out MCPTox) | ~20 % | **14 %** | **84 %** |
-| mean leave-one-family-out recall | — | 81 % | **93 %** |
+| cross-family recall, GPT-2 (held-out MCPTox) | ~20 % | **14 %** | **84 %** |
+| cross-family recall, Pythia-70m / Gemma-2-2b | ~20 % | 88 % / 77 % | 100 % / 85 % |
+| mean leave-one-family-out recall (GPT-2) | — | 81 % | **93 %** |
 | additive-confound dependence (ablation) | — | — | none (84.5→87 when ablated) |
 | naive camouflage-suffix evasion | — | **0 %** | — |
 
@@ -147,10 +173,10 @@ Probe catches 146/146 originals; with benign "read-only" suffixes appended, wors
 1. **In-distribution optimism:** probe is supervised + same-distribution; deberta is zero-shot. The 99 % is a *product* comparison ("train your own detector"), not a like-for-like science comparison.
 2. **MCPTox is templated → easy for any trained classifier** (TF-IDF ~97 % in the paper). Do not headline the 99 %. Public floor = cross-style; punchline = "matched-vocab text detector = 0 %".
 3. **All data synthetic / LLM-generated.** No confirmed in-the-wild description-only poisoning case as of the paper.
-4. **GPT-2 + one jb-SAE, one layer (blocks.7).** Gemma Scope on gemma-2-2b is the upgrade path (needs an HF token to accept the Gemma license).
+4. **The dramatic GPT-2 SAE win (14 %→84 %) is a model/layer outlier.** Replicated on Pythia-70m and Gemma-2-2b (exp 12,13): raw activations already generalize cross-family (88 % / 77 %), and SAE adds only +12 / +8 recall. The robust claim is "SAE = small consistent lift," not "+70 rescue." Single SAE layer per model; broader layer sweeps not run.
 5. **Ablation shows non-necessity (redundancy), not zero role** of additive features.
 6. **Cross-family direction A (train MCPTox → test handcrafted) still ~0 %** even with SAE — SAE helps only when training is diverse/subtle.
-7. **Gradient-optimized adversarial attack untested** — the real robustness threat.
+7. **Adversarial:** robust to naive fixed suffix (0 %) and greedy black-box suffix search (5 %, exp 11); full white-box gradient GCG still untested — the strongest threat.
 8. **No single monosemantic "malicious intent" SAE feature** found; signal is distributed.
 
 ---

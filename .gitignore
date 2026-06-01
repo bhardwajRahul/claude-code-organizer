@@ -7,6 +7,7 @@ node_modules/
 
 # Python benchmark venv + caches (1.8G, recreate from research/requirements-bench.txt)
 research/.venv-bench/
+research/_results/
 **/__pycache__/
 *.pyc
 
