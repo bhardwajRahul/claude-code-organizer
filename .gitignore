@@ -5,7 +5,14 @@ node_modules/
 .claude/
 .impeccable.md
 
+# Python benchmark venv + caches (1.8G, recreate from research/requirements-bench.txt)
+research/.venv-bench/
+**/__pycache__/
+*.pyc
+
 # Internal — never push
+research/session-digest-*.md
+research/activation-scanner-roadmap-*.md
 marketing/
 mockup*.html
 ui-*.png
