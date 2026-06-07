@@ -4,6 +4,11 @@ End-to-end reproducible record of the investigation + benchmarks behind
 `activation-probe-tool-poisoning.md`. Written so an independent agent (e.g. Codex)
 can review the reasoning, re-run every experiment, and confirm (or refute) each number.
 
+For the current product-shaped scanner path after the original paper experiments,
+use `PRODUCT_REPRODUCIBILITY_LEDGER_2026-06-03.md`. That ledger records the Qwen
+pooled artifact, runtime policy, calibration report, review queue, and exact
+commands needed for peer review of the scanner preview.
+
 **TL;DR of the scientific claims being reproduced:**
 > 1. Text-level detectors (incl. Snyk's shipped `deberta-v3-base-prompt-injection-v2`) catch **0–20 %** of MCP tool poisoning.
 > 2. Activation probes hit **96–99 %** in-distribution. Cross-family generalization (train one attack family, test a structurally-distinct one) is **strong on capable models** (raw recall: Pythia-70m 88 %, Gemma-2-2b 77 %) but can be poor on a weak model/layer (GPT-2 layer-7: raw 14 %).

@@ -1,11 +1,17 @@
 node_modules/
 .DS_Store
 *.log
+
+# Local secrets
 .env
+.env.*
+**/.env
+**/.env.*
 .claude/
 .impeccable.md
 
 # Python benchmark venv + caches (1.8G, recreate from research/requirements-bench.txt)
+research/.venv-audit/
 research/.venv-bench/
 research/_results/
 **/__pycache__/
@@ -43,3 +49,6 @@ datasets/mcp-vulnerabilities/
 datasets/prompt-injection-datasets/
 
 research/datasets/MCPTox-Benchmark/
+research/datasets/external_raw/
+research/datasets/external_imports/
+research/audit_sources/

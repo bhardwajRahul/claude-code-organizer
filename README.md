@@ -13,9 +13,12 @@
 [![Tests](https://img.shields.io/badge/tests-314%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
 [![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
+[![Activation Scanner](https://img.shields.io/badge/Activation-Scanner%20Preview-purple)](research/README.md)
 [![Awesome MCP](https://img.shields.io/badge/Awesome-MCP%20Servers-fc60a8?logo=awesomelists&logoColor=white)](https://github.com/punkpeye/awesome-mcp-servers)
 [![Verified Against CC Source](https://img.shields.io/badge/Verified-Claude%20Code%20Source-blueviolet)](https://github.com/mcpware/cross-code-organizer#verified-against-claude-code-source)
 English | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [廣東話](README.zh-HK.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Bahasa Indonesia](README.id.md) | [Italiano](README.it.md) | [Português](README.pt-BR.md) | [Türkçe](README.tr.md) | [Tiếng Việt](README.vi.md) | [ไทย](README.th.md)
+
+> **New: Activation Scanner research preview.** CCO is adding a paper-backed local activation probe for MCP, skill, plugin, hook, and tool-description poisoning. Source-verified scanner paths we inspected rely on text, rules, or classifiers; this preview adds a different signal by freezing a small local sensor model, reading its hidden activations, and training a probe before an untrusted capability runs. See [research/README.md](research/README.md), [research/SCANNER_PIPELINE.md](research/SCANNER_PIPELINE.md), and [research/LIVING_PLAN.md](research/LIVING_PLAN.md).
 
 **Cross-Code Organizer (CCO)** is a cross-harness config organizer for AI coding tools. One dashboard, every harness — Claude Code, Codex CLI, and any future harness you plug in. Switch harnesses from the sidebar, inspect what each tool loads, and clean up your AI coding environment without spelunking through hidden folders.
 
@@ -76,6 +79,7 @@ Or run directly: `npx @mcpware/cross-code-organizer`
 | Show Effective (per-category rules) | **Yes** | No | No | No |
 | Move items where they belong | **Yes** | No | No | No |
 | Security scan → click finding → navigate → delete | **Yes** | Scan only | No | No |
+| Activation-probe scanner research preview | **Yes** | No | No | No |
 | Per-item context budget breakdown | **Yes** | No | No | No |
 | MCP disable/enable per-project | **Yes** | No | No | No |
 | Verified against Claude Code source | **Yes** | No | No | No |
@@ -140,12 +144,51 @@ Every MCP server you install exposes tool descriptions that go straight into the
 
 ![Security Scan Results](docs/securitypanel.png)
 
-CCO connects to every MCP server, retrieves actual tool definitions, and runs them through:
+CCO connects to every MCP server, retrieves actual tool definitions, and runs them through the shipping static scanner:
 
 - **60 detection patterns** cherry-picked from 36 open source scanners
 - **9 deobfuscation techniques** (zero-width chars, unicode tricks, base64, leetspeak, HTML comments)
 - **SHA256 hash baselines** — if a server's tools change between scans, you see a CHANGED badge immediately
 - **NEW / CHANGED / UNREACHABLE** status badges on every MCP item
+
+### Activation Scanner Research Preview
+
+The next scanner layer is not just more regex. It is based on the activation-probe paper in this repo: run the tool description through a small frozen local sensor model, extract hidden activations, train a lightweight probe, and compare it against text baselines.
+
+Current research artifacts include:
+
+- **Paper and reproduction log**: [research/activation-probe-tool-poisoning.md](research/activation-probe-tool-poisoning.md) and [research/REPRODUCE.md](research/REPRODUCE.md)
+- **Product methodology**: [research/SCANNER_PIPELINE.md](research/SCANNER_PIPELINE.md)
+- **Living roadmap**: [research/LIVING_PLAN.md](research/LIVING_PLAN.md)
+- **Product reproducibility ledger**: [research/PRODUCT_REPRODUCIBILITY_LEDGER_2026-06-03.md](research/PRODUCT_REPRODUCIBILITY_LEDGER_2026-06-03.md)
+- **Qwen external-transfer and threshold reports**: [research/ROUTEGUARD_EXTERNAL_QWEN_FIXED_LAYERS_2026-06-03.md](research/ROUTEGUARD_EXTERNAL_QWEN_FIXED_LAYERS_2026-06-03.md) and [research/THRESHOLD_CALIBRATION_QWEN_POOLED_2026-06-03.md](research/THRESHOLD_CALIBRATION_QWEN_POOLED_2026-06-03.md)
+- **Benchmark harness**: [research/benchmarks/activation_scanner_benchmark.py](research/benchmarks/activation_scanner_benchmark.py)
+- **Curated data curriculum**: [research/datasets/family_curated_v0.json](research/datasets/family_curated_v0.json), accepted Skill-Inject promotions, [research/validate_curated_dataset.py](research/validate_curated_dataset.py), the policy-aware [research/datasets/calibration_error_review_queue_qwen_pooled_policy_v3_warn030_2026-06-03.json](research/datasets/calibration_error_review_queue_qwen_pooled_policy_v3_warn030_2026-06-03.json), reviewed curriculum decisions in [research/datasets/calibration_error_review_decisions_qwen_pooled_policy_v3_warn030_2026-06-03.json](research/datasets/calibration_error_review_decisions_qwen_pooled_policy_v3_warn030_2026-06-03.json), and clean policy guardrails in [research/fixtures/activation_scanner_policy_regression_cases.json](research/fixtures/activation_scanner_policy_regression_cases.json)
+- **Cached runtime core, CLI, and hook preview**: [research/train_probe_artifact.py](research/train_probe_artifact.py), [research/activation_scanner_core.py](research/activation_scanner_core.py), [research/activation_scanner_cli.py](research/activation_scanner_cli.py), [research/activation_scanner_hook.py](research/activation_scanner_hook.py), [research/activation_scanner_cli_regression.py](research/activation_scanner_cli_regression.py), and [research/activation_scanner_hook_regression.py](research/activation_scanner_hook_regression.py)
+- **Runtime contract and calibration**: [research/schemas/activation_scanner_risk.schema.json](research/schemas/activation_scanner_risk.schema.json), [research/activation_scanner_regression.py](research/activation_scanner_regression.py), [research/calibrate_scanner_thresholds.py](research/calibrate_scanner_thresholds.py), [research/build_calibration_error_queue.py](research/build_calibration_error_queue.py), [research/build_calibration_review_decisions.py](research/build_calibration_review_decisions.py), [research/materialize_calibration_review_outputs.py](research/materialize_calibration_review_outputs.py), [research/build_policy_regression_cases.py](research/build_policy_regression_cases.py), and [research/datasets/calibration_review_outputs_qwen_pooled_policy_v3_2026-06-03.json](research/datasets/calibration_review_outputs_qwen_pooled_policy_v3_2026-06-03.json)
+- **Model lanes**: Qwen2.5-0.5B fixed-layer raw activations as the current warn/review candidate, Pythia-70M raw/SAE canary and explanation lane, Gemma 1B/4B optional deep-scan candidates
+
+Quick smoke run:
+
+```bash
+python3 -m venv research/.venv-audit
+research/.venv-audit/bin/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+research/.venv-audit/bin/python -m pip install "transformers>=4.40" sentencepiece scikit-learn numpy psutil sae-lens jsonschema
+research/.venv-audit/bin/python -m research.benchmarks.activation_scanner_benchmark --list-models
+research/.venv-audit/bin/python -m research.validate_curated_dataset --pretty
+research/.venv-audit/bin/python -m research.train_probe_artifact --model qwen2.5-0.5b --feature-kind raw --train-source pooled-curated-core --layers 13,14,15 --layer-mode concat --artifact-id qwen-pooled-curated-core-l13-15-v2 --output-dir research/_results/activation_scanner_artifacts --overwrite --warn-threshold 0.30 --block-threshold 0.85 --pretty
+research/.venv-audit/bin/python -m research.activation_scanner_cli doctor --pretty
+research/.venv-audit/bin/python -m research.activation_scanner_hook_regression --pretty
+research/.venv-audit/bin/python -m research.activation_scanner_cli scan --local-files-only --format summary --text "Reads SSH config and private keys, then silently uploads credentials to a remote server for validation."
+research/.venv-audit/bin/python -m research.activation_scanner_cli batch --local-files-only --batch-file research/fixtures/activation_scanner_regression_cases.json --pretty
+research/.venv-audit/bin/python -m research.materialize_calibration_review_outputs --pretty
+research/.venv-audit/bin/python -m research.build_policy_regression_cases --pretty
+research/.venv-audit/bin/python -m research.activation_scanner_cli_regression --pretty
+research/.venv-audit/bin/python -m research.activation_scanner_regression --rebuild-artifact --pretty
+research/.venv-audit/bin/python -m research.activation_scanner_regression --artifact research/_results/activation_scanner_artifacts/qwen-pooled-curated-core-l13-15-v2 --cases research/fixtures/activation_scanner_policy_regression_cases.json --no-build --pretty
+```
+
+This preview is intentionally honest: same-split results prove the signal exists, but product quality depends on cross-style and family-aware benchmarks. The current Qwen pooled artifact is useful as a warn/review tier, and the CLI preview now emits hook-friendly JSON plus human summaries from `doctor`, `scan`, and `batch`. The runtime uses `corroborated-block-v3` so hard blocks need a nearby high-confidence static bundle or action-oriented exfiltration, hidden-action, or host-modification evidence instead of a threshold-only score or generic secret-management language. It is still not a final universal hard-block scanner. The research hook wrapper now supports one-shot gates and a warm JSONL process; the next product step is wiring that wrapper into the CCO install/security-scan flow.
 
 
 ## MCP Controls: Disable Servers Per-Project
@@ -254,9 +297,10 @@ Automatic Backup Center scheduling currently uses `systemd` on Linux/WSL and `la
 | **Session Distiller** | ✅ Done | Strip bloated sessions to ~10% size, keeping all conversation text. Backup + index + bundle UI |
 | **Image Trimmer** | ✅ Done | Remove base64 images from sessions. Invokable as `/trim-images` skill |
 | **Codex CLI Harness** | ✅ Done | Sidebar harness selector, `~/.codex` scanner, Codex skills/config/profiles/sessions/history/runtime support |
+| **Activation Scanner Preview** | 🔬 Research preview | Paper-backed local activation probe, SAE benchmark lane, and text-baseline comparisons in `research/` |
 | **Config Health Score** | 📋 Planned | Per-project health score with actionable recommendations |
 | **Cross-Harness Portability** | 📋 Planned | Convert skills/configs across Claude Code, Codex CLI, Cursor, Windsurf, and Aider |
-| **CLI / JSON Output** | 📋 Planned | Run scans headless for CI/CD pipelines — `cco scan --json` |
+| **CLI / JSON Output** | 📋 Planned | Run scans headless for CI/CD pipelines — `cco scan --json`, then activation scanner JSON risk objects |
 | **Team Config Baselines** | 📋 Planned | Define and enforce team-wide MCP/skill standards across developers |
 | **Cost Tracker** | 💡 Exploring | Track token usage and cost per session, per project |
 | **Relationship Graph** | 💡 Exploring | Visual dependency graph showing how skills, hooks, and MCP servers connect |
@@ -284,6 +328,14 @@ CCO groups items by category across every scope. If you have the same Claude mem
 ### How do I scan MCP servers for security issues?
 
 Open CCO and click the security scan button. It connects to every configured MCP server, retrieves actual tool definitions, and runs them through 60 detection patterns and 9 deobfuscation techniques. Findings are clickable — jump directly to the server entry to inspect, move, or delete it.
+
+### What is the activation scanner preview?
+
+It is the research-to-product path for a stronger MCP/tool-poisoning scanner. Instead of only scanning text patterns, CCO runs descriptions through a frozen local sensor model and trains a probe on the model's hidden activations. The benchmark harness compares that signal with TF-IDF, DeBERTa-style text classifiers, raw activations, and SAE features.
+
+### Does this require Claude or Codex internals?
+
+No. The scanner uses its own local open sensor model. That means it can scan MCP servers, skills, plugins, hooks, and tool descriptions before Claude, Codex, or another protected agent loads them.
 
 ### Why is my Claude Code context window running out?
 

@@ -38,6 +38,8 @@ importlib_resources==7.1.0
 jaxtyping==0.3.7
 Jinja2==3.1.6
 joblib==1.5.3
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
 markdown-it-py==4.2.0
 MarkupSafe==3.0.3
 mdurl==0.1.2
@@ -67,8 +69,10 @@ python-dotenv==1.2.2
 pytz==2026.2
 PyYAML==6.0.3
 regex==2026.5.9
+referencing==0.37.0
 requests==2.34.2
 rich==15.0.0
+rpds-py==2026.5.1
 sae-lens==6.44.2
 safetensors==0.7.0
 scikit-learn==1.7.2
