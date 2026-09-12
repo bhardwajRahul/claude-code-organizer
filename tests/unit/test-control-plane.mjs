@@ -263,6 +263,10 @@ describe("privacy metrics", () => {
         recordPrivacyMetric(home, "doctor_open", "claude")
       ));
       assert.equal((await getPrivacyMetricsStatus(home)).sharePreview.events.doctor_open, 11);
+
+      await writeFile(metricsPath(home), JSON.stringify({ enabled: true, secret: "local-test", days: null }));
+      assert.equal(await recordPrivacyMetric(home, "doctor_open", "claude"), true);
+      assert.equal((await getPrivacyMetricsStatus(home)).sharePreview.events.doctor_open, 1);
     } finally {
       await rm(home, { recursive: true, force: true });
     }

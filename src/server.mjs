@@ -494,7 +494,7 @@ async function handleRequest(req, res) {
     }
     const repairs = await findExactDuplicateRepairs(cachedData.items, scopeId);
     const report = computeHygieneReport(cachedData, scopeId, { exactDuplicateRepairs: repairs });
-    await recordPrivacyMetric(HOME, "doctor_open", activeAdapter.id, { inventoryCount: cachedData.items.length });
+    await recordPrivacyMetric(HOME, "doctor_open", activeAdapter.id, { inventoryCount: cachedData.items.length }).catch(() => {});
     return json(res, { ok: true, harness: cachedData.harness, ...report });
   }
 
@@ -513,7 +513,7 @@ async function handleRequest(req, res) {
         filePath => isPathAllowed(filePath, harnessId, cachedData, { knownOnly: true }),
       );
       await freshScan();
-      await recordPrivacyMetric(HOME, "repair_apply", activeAdapter.id, { inventoryCount: cachedData.items.length });
+      await recordPrivacyMetric(HOME, "repair_apply", activeAdapter.id, { inventoryCount: cachedData.items.length }).catch(() => {});
       return json(res, result);
     } catch (error) {
       return json(res, { ok: false, error: error.message }, requestErrorStatus(error, 400));
@@ -542,7 +542,7 @@ async function handleRequest(req, res) {
       targetRootDir: targetPaths.rootDir,
       targetScope,
     });
-    await recordPrivacyMetric(HOME, "migration_preview", activeAdapter.id, { inventoryCount: cachedData.items.length });
+    await recordPrivacyMetric(HOME, "migration_preview", activeAdapter.id, { inventoryCount: cachedData.items.length }).catch(() => {});
     return json(res, {
       ok: true,
       sourceHarness: cachedData.harness,
@@ -588,7 +588,7 @@ async function handleRequest(req, res) {
         validateTarget: async filePath => isPathWithin(filePath, targetRoot),
       });
       if (result.migrated) await refreshScanCache(targetHarnessId);
-      await recordPrivacyMetric(HOME, "migration_apply", activeAdapter.id, { inventoryCount: cachedData.items.length });
+      await recordPrivacyMetric(HOME, "migration_apply", activeAdapter.id, { inventoryCount: cachedData.items.length }).catch(() => {});
       return json(res, result);
     } catch (error) {
       return json(res, { ok: false, error: error.message }, requestErrorStatus(error, 400));
@@ -602,7 +602,7 @@ async function handleRequest(req, res) {
       const result = await undoControlPlaneTransaction(transactionId, CONTROL_DIR, isKnownControlPlanePath);
       invalidateCachedData(harnessId);
       for (const summary of await listAdapters()) invalidateCachedData(summary.id);
-      await recordPrivacyMetric(HOME, kind === "migration" ? "migration_undo" : "repair_undo", activeAdapter.id);
+      await recordPrivacyMetric(HOME, kind === "migration" ? "migration_undo" : "repair_undo", activeAdapter.id).catch(() => {});
       return json(res, result);
     } catch (error) {
       return json(res, { ok: false, error: error.message }, requestErrorStatus(error, 400));

@@ -1174,7 +1174,7 @@ body {
 }
 .doctor-hdr h3 { margin: 4px 0 4px; font-size: 1.35rem; }
 .doctor-hdr .modal-sub { margin: 0; }
-.doctor-body { max-height: calc(88vh - 105px); overflow: auto; padding: 18px 24px 26px; }
+.doctor-body { max-height: calc(min(88vh, 920px) - 105px); overflow: auto; padding: 18px 24px 26px; }
 .doctor-section { padding: 18px 0; border-bottom: 1px solid var(--border); }
 .doctor-section:last-child { border-bottom: 0; }
 .doctor-section-hdr { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 12px; }

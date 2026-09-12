@@ -989,6 +989,10 @@ function setupResizer(resizerId, panelId, direction) {
 
 function renderAll() {
   normalizeState();
+  if (
+    doctorReport &&
+    (doctorReport.harness?.id !== selectedHarnessId || doctorReport.contextMap?.scope?.id !== selectedScopeId)
+  ) clearDoctorBadge();
   updateCapabilityVisibility();
   updateHarnessSelector();
   updateHarnessBranding();
@@ -4708,6 +4712,14 @@ function closeHarnessDoctor() {
   document.getElementById("doctorModal")?.classList.add("hidden");
 }
 
+function clearDoctorBadge() {
+  const badge = document.getElementById("doctorBadge");
+  if (!badge) return;
+  badge.textContent = "";
+  badge.removeAttribute("title");
+  badge.classList.add("hidden");
+}
+
 async function refreshDoctorInventory() {
   const previousScope = selectedScopeId;
   data = await fetchJson(apiUrl("/api/scan"));
@@ -4811,6 +4823,7 @@ function renderDoctorPrivacy(status) {
 async function loadHarnessDoctor() {
   doctorReport = null;
   doctorMigrationPreview = null;
+  clearDoctorBadge();
   document.getElementById("doctorOverview").innerHTML = `<div class="doctor-loading">Auditing the selected scope…</div>`;
   document.getElementById("doctorContextMap").innerHTML = "";
   document.getElementById("doctorFindings").innerHTML = "";

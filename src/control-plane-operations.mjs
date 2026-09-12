@@ -266,6 +266,7 @@ export async function applySkillMigration({ candidates, selectedSourcePaths, ove
         backupPath,
         installedFingerprint,
       });
+      await writeManifest(tx.dir, tx.manifest);
     }
     await writeManifest(tx.dir, tx.manifest);
   } catch (error) {

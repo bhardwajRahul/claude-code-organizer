@@ -46,7 +46,9 @@ export function metricsPath(home) {
 async function readState(home) {
   try {
     const parsed = JSON.parse(await readFile(metricsPath(home), "utf8"));
-    return { ...defaultState(), ...parsed };
+    const state = { ...defaultState(), ...parsed };
+    if (!state.days || typeof state.days !== "object" || Array.isArray(state.days)) state.days = {};
+    return state;
   } catch {
     return defaultState();
   }

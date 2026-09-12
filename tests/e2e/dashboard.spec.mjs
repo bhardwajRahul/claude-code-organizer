@@ -3771,6 +3771,10 @@ test.describe('Harness Doctor control plane', () => {
     await expect(page.locator('#doctorMigrationTarget option')).toHaveCount(2);
     await expect(page.locator('#doctorMetricsEnabled')).not.toBeChecked();
     expect(errors).toEqual([]);
+
+    await page.locator('#doctorClose').click();
+    await page.locator('.s-scope-hdr[data-scope-id="global"] .s-nm').click();
+    await expect(page.locator('#doctorBadge')).toHaveClass(/hidden/);
   });
 
   test('copy-only skill migration previews, applies, and undoes', async () => {
