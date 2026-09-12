@@ -220,7 +220,24 @@ function appendMetadata(record, backupPath, indexPath, hasIndex) {
 }
 
 function markdownCell(value) {
-  return String(value).replace(/\r?\n/g, " ").replace(/\|/g, "\\|");
+  return String(value).replace(/\\/g, "\\\\").replace(/\r?\n/g, " ").replace(/\|/g, "\\|");
+}
+
+function stripAngleMarkup(value) {
+  let clean = "";
+  let insideTag = false;
+  for (const character of String(value)) {
+    if (character === "<") {
+      insideTag = true;
+      clean += " ";
+    } else if (character === ">" && insideTag) {
+      insideTag = false;
+      clean += " ";
+    } else if (!insideTag) {
+      clean += character;
+    }
+  }
+  return clean;
 }
 
 function buildIndex({ backupPath, outputPath, inputPath, entries }) {
@@ -260,7 +277,7 @@ function extractTitle(records) {
       : Array.isArray(content)
         ? content.filter(block => block?.type === "text").map(block => block.text).join(" ")
         : "";
-    text = text.replace(/<[^>]+>[^<]*<\/[^>]+>/g, "").replace(/<[^>]+>/g, "").trim();
+    text = stripAngleMarkup(text).replace(/\s+/g, " ").trim();
     if (text && !text.startsWith("[") && text.length > 5) return text.slice(0, 80);
   }
   return "Untitled session";

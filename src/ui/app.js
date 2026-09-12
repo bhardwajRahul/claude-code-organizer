@@ -162,6 +162,8 @@ const SHORT_DATE = new Intl.DateTimeFormat("en-US", {
 });
 
 async function init() {
+  // SSE heartbeat tells the local server this tab is alive.
+  new EventSource("/heartbeat");
   try {
     const harnessResponse = await fetchJson("/api/harnesses");
     if (harnessResponse.ok) {
@@ -2159,11 +2161,14 @@ function setupCcActions() {
     if (!btn) return;
     const prompt = btn.dataset.prompt;
     navigator.clipboard.writeText(prompt).then(() => {
-      const orig = btn.innerHTML;
+      const originalNodes = [...btn.childNodes].map((node) => node.cloneNode(true));
       const isResume = btn.dataset.kind === "Resume Session" || prompt.includes(`${getHarnessExecutable()} --resume`);
       const msg = isResume ? "Copied! Paste in a new terminal" : `Copied! Paste to ${getHarnessName()}`;
-      btn.innerHTML = `<span class="cc-ico">✅</span>${msg}`;
-      setTimeout(() => { btn.innerHTML = orig; }, 2500);
+      const icon = document.createElement("span");
+      icon.className = "cc-ico";
+      icon.textContent = "✅";
+      btn.replaceChildren(icon, document.createTextNode(msg));
+      setTimeout(() => { btn.replaceChildren(...originalNodes); }, 2500);
     });
   });
 }
@@ -2551,16 +2556,23 @@ function renderContextBudget(budget) {
   const usablePct = Math.max(0, Math.round((100 - loadedPct - acPct) * 10) / 10);
 
   // Summary text
-  document.getElementById("ctxBudgetTotal").innerHTML = `
+  const totalEl = document.getElementById("ctxBudgetTotal");
+  totalEl.innerHTML = `
     <b>${formatTokens(loaded)}</b> loaded
     <span class="ctx-pct">(${loadedPct}% of ${formatTokens(limit)})</span>
     <span class="ctx-badge ctx-badge-${budget.method}">${budget.method}</span>
-    <div class="ctx-budget-detail-toggle" onclick="this.nextElementSibling.classList.toggle('hidden');this.querySelector('.ctx-toggle-arrow').textContent=this.nextElementSibling.classList.contains('hidden')?'▸':'▾'"><span class="ctx-toggle-arrow">▸</span> What does this mean?</div>
+    <div class="ctx-budget-detail-toggle"><span class="ctx-toggle-arrow">▸</span> What does this mean?</div>
     <div class="ctx-budget-explain hidden">
       When you start a Claude Code session under this directory, <b>${formatTokens(loaded)}</b> (${loadedPct}%) is already loaded into context before you type anything — this includes your CLAUDE.md files, memory, skills, rules, and system overhead.
       <br><br>After the autocompact buffer (~${acPct}%, reserved by Claude Code for compaction), about <b>${usablePct}%</b> is left for your conversation. ${deferred > 0 ? `Within that space, up to <b>${deferredPct}%</b> (${formatTokens(deferred)}) could be consumed by deferred tools — Claude loads these selectively as needed, not all at once.` : ""}
       <br><br>The fuller the context, the less accurate Claude becomes — an effect known as <b>context rot</b>.
     </div>`;
+  const detailToggle = totalEl.querySelector(".ctx-budget-detail-toggle");
+  detailToggle.addEventListener("click", () => {
+    const explanation = detailToggle.nextElementSibling;
+    explanation.classList.toggle("hidden");
+    detailToggle.querySelector(".ctx-toggle-arrow").textContent = explanation.classList.contains("hidden") ? "▸" : "▾";
+  });
 
   // Context window toggle handler — buttons are in HTML now, not injected
   document.querySelectorAll("#ctxWindowToggle .ctx-win-btn").forEach(btn => {
@@ -3118,8 +3130,7 @@ async function loadPreview(item) {
       const res = await fetchJson(`/api/session-preview?path=${encodeURIComponent(item.path)}`);
       if (currentKey !== detailPreviewKey) return;
       if (!res.ok) { preview.textContent = "Cannot load session preview"; return; }
-      preview.textContent = "";
-      preview.innerHTML = renderSessionChat(res);
+      preview.replaceChildren(renderSessionChat(res));
       requestAnimationFrame(() => {
         preview.scrollTop = preview.scrollHeight;
       });
@@ -3134,12 +3145,11 @@ async function loadPreview(item) {
     if (!res.ok) { preview.textContent = res.error || "Cannot load preview"; return; }
 
     const sourceLanguage = getSourceLanguage(filePath, item);
-    if (sourceLanguage) {
+    if (filePath.endsWith(".md") || filePath.endsWith(".markdown")) {
+      preview.replaceChildren(renderMarkdown(res.content));
+    } else if (sourceLanguage) {
       preview.textContent = "";
       preview.innerHTML = renderHighlightedSource(res.content, sourceLanguage);
-    } else if (filePath.endsWith(".md")) {
-      preview.textContent = "";
-      preview.innerHTML = `<div class="md-preview">${renderMarkdown(res.content)}</div>`;
     } else {
       preview.textContent = res.content;
     }
@@ -3926,47 +3936,62 @@ function resolveItem(itemRef) {
 
 function renderSessionChat(res) {
   const { title, totalMessages, showing, messages } = res;
-  let html = "";
+  const container = document.createElement("div");
+  container.className = "chat-container";
 
-  // Header
-  if (title) html += `<div class="chat-title">${esc(title)}</div>`;
-  if (totalMessages > showing) {
-    html += `<div class="chat-meta">Showing last ${showing} of ${totalMessages} messages</div>`;
-  } else {
-    html += `<div class="chat-meta">${totalMessages} messages</div>`;
+  if (title) {
+    const titleEl = document.createElement("div");
+    titleEl.className = "chat-title";
+    titleEl.textContent = title;
+    container.append(titleEl);
   }
+  const meta = document.createElement("div");
+  meta.className = "chat-meta";
+  if (totalMessages > showing) {
+    meta.textContent = `Showing last ${showing} of ${totalMessages} messages`;
+  } else {
+    meta.textContent = `${totalMessages} messages`;
+  }
+  container.append(meta);
 
-  // Messages
-  for (const msg of messages) {
+  for (const msg of messages || []) {
     const isUser = msg.role === "user";
     const roleClass = isUser ? "chat-user" : "chat-assistant";
     const assistantName = getHarnessShortName();
     const roleLabel = isUser ? "You" : assistantName;
     const avatar = isUser ? "U" : assistantName.slice(0, 1).toUpperCase();
 
-    let body = esc(msg.text || "");
-    // Basic markdown-ish: **bold**, `code`, ```blocks```
-    body = body.replace(/```([\s\S]*?)```/g, '<pre class="chat-code-block">$1</pre>');
-    body = body.replace(/`([^`]+)`/g, '<code class="chat-inline-code">$1</code>');
-    body = body.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    const message = document.createElement("div");
+    message.className = `chat-msg ${roleClass}`;
+    const role = document.createElement("div");
+    role.className = "chat-role";
+    const avatarEl = document.createElement("span");
+    avatarEl.className = `chat-avatar chat-avatar-${isUser ? "user" : "ai"}`;
+    avatarEl.textContent = avatar;
+    role.append(avatarEl, document.createTextNode(` ${roleLabel}`));
 
-    let toolHtml = "";
+    const bubble = document.createElement("div");
+    bubble.className = "chat-bubble";
+    const body = document.createElement("div");
+    body.className = "chat-text";
+    appendChatMarkdown(body, msg.text || "");
+    bubble.append(body);
+
     if (msg.toolUses?.length) {
-      const tools = msg.toolUses.map(t => `<span class="chat-tool-name">${esc(t.name)}</span>`).join("");
-      toolHtml = `<div class="chat-tool-row">${tools}</div>`;
+      const tools = document.createElement("div");
+      tools.className = "chat-tool-row";
+      for (const tool of msg.toolUses) {
+        const toolName = document.createElement("span");
+        toolName.className = "chat-tool-name";
+        toolName.textContent = tool.name || "tool";
+        tools.append(toolName);
+      }
+      bubble.append(tools);
     }
-
-    html += `
-      <div class="chat-msg ${roleClass}">
-        <div class="chat-role"><span class="chat-avatar chat-avatar-${isUser ? "user" : "ai"}">${avatar}</span> ${roleLabel}</div>
-        <div class="chat-bubble">
-          <div class="chat-text">${body}</div>
-          ${toolHtml}
-        </div>
-      </div>`;
+    message.append(role, bubble);
+    container.append(message);
   }
-
-  return `<div class="chat-container">${html}</div>`;
+  return container;
 }
 
 function formatShortDate(raw) {
@@ -4055,21 +4080,148 @@ function highlightStrings(text, language) {
   return out + esc(text.slice(last));
 }
 
-/**
- * Render markdown to HTML using marked.js.
- * Strips YAML frontmatter (---...---) common in memory/skill files.
- * Falls back to escaped plain text if marked is not loaded.
- */
-function renderMarkdown(text) {
-  if (!text) return "";
-  // Strip YAML frontmatter
-  let content = text.replace(/^---\n[\s\S]*?\n---\n?/, "").trim();
+function safeLinkHref(value) {
   try {
-    if (typeof marked === "undefined") return `<pre>${esc(content)}</pre>`;
-    if (typeof marked.parse === "function") return marked.parse(content);
-    if (typeof marked === "function") return marked(content);
-  } catch {}
-  return `<pre>${esc(content)}</pre>`;
+    const url = new URL(value, document.baseURI);
+    return ["http:", "https:", "mailto:"].includes(url.protocol) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function appendInlineMarkdown(parent, value, codeClass = "") {
+  const text = String(value || "");
+  const tokenPattern = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\*[^*\n]+\*|\[[^\]\n]+\]\([^\s)]+\))/g;
+  let offset = 0;
+  for (const match of text.matchAll(tokenPattern)) {
+    parent.append(document.createTextNode(text.slice(offset, match.index)));
+    const token = match[0];
+    let element;
+    if (token.startsWith("`")) {
+      element = document.createElement("code");
+      if (codeClass) element.className = codeClass;
+      element.textContent = token.slice(1, -1);
+    } else if (token.startsWith("**")) {
+      element = document.createElement("strong");
+      element.textContent = token.slice(2, -2);
+    } else if (token.startsWith("[")) {
+      const link = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+      const href = link && safeLinkHref(link[2]);
+      if (href) {
+        element = document.createElement("a");
+        element.href = href;
+        element.textContent = link[1];
+        element.target = "_blank";
+        element.rel = "noopener noreferrer";
+      }
+    } else {
+      element = document.createElement("em");
+      element.textContent = token.slice(1, -1);
+    }
+    parent.append(element || document.createTextNode(token));
+    offset = match.index + token.length;
+  }
+  parent.append(document.createTextNode(text.slice(offset)));
+}
+
+function appendChatMarkdown(parent, value) {
+  const text = String(value || "");
+  const fencePattern = /```[^\n]*\n?([\s\S]*?)```/g;
+  let offset = 0;
+  for (const match of text.matchAll(fencePattern)) {
+    appendInlineMarkdown(parent, text.slice(offset, match.index), "chat-inline-code");
+    const pre = document.createElement("pre");
+    pre.className = "chat-code-block";
+    pre.textContent = match[1];
+    parent.append(pre);
+    offset = match.index + match[0].length;
+  }
+  appendInlineMarkdown(parent, text.slice(offset), "chat-inline-code");
+}
+
+function isMarkdownBlockStart(line) {
+  return /^(?:\s*```.*|\s{0,3}#{1,6}\s+.*|\s*>\s?.*|\s*(?:[-+*]|\d+\.)\s+.*|\s*(?:---+|___+|\*\*\*+)\s*)$/.test(line);
+}
+
+/** Render a safe local Markdown subset without interpreting raw HTML. */
+function renderMarkdown(text) {
+  const container = document.createElement("div");
+  container.className = "md-preview";
+  let content = String(text || "").replace(/\r\n?/g, "\n");
+  content = content.replace(/^---\n[\s\S]*?\n---(?:\n|$)/, "").trim();
+  const lines = content.split("\n");
+
+  for (let index = 0; index < lines.length;) {
+    const line = lines[index];
+    if (!line.trim()) { index++; continue; }
+
+    const fence = line.match(/^\s*```([^\s`]*)/);
+    if (fence) {
+      const codeLines = [];
+      index++;
+      while (index < lines.length && !/^\s*```\s*$/.test(lines[index])) codeLines.push(lines[index++]);
+      if (index < lines.length) index++;
+      const pre = document.createElement("pre");
+      const code = document.createElement("code");
+      if (fence[1]) code.className = `language-${fence[1].replace(/[^A-Za-z0-9_-]/g, "")}`;
+      code.textContent = codeLines.join("\n");
+      pre.append(code);
+      container.append(pre);
+      continue;
+    }
+
+    const heading = line.match(/^\s{0,3}(#{1,6})\s+(.+)$/);
+    if (heading) {
+      const element = document.createElement(`h${heading[1].length}`);
+      appendInlineMarkdown(element, heading[2]);
+      container.append(element);
+      index++;
+      continue;
+    }
+
+    if (/^\s*(?:---+|___+|\*\*\*+)\s*$/.test(line)) {
+      container.append(document.createElement("hr"));
+      index++;
+      continue;
+    }
+
+    if (/^\s*>/.test(line)) {
+      const values = [];
+      while (index < lines.length && /^\s*>/.test(lines[index])) values.push(lines[index++].replace(/^\s*>\s?/, ""));
+      const quote = document.createElement("blockquote");
+      const paragraph = document.createElement("p");
+      appendInlineMarkdown(paragraph, values.join("\n"));
+      quote.append(paragraph);
+      container.append(quote);
+      continue;
+    }
+
+    const listItem = line.match(/^\s*(?:([-+*])|(\d+)\.)\s+(.+)$/);
+    if (listItem) {
+      const ordered = Boolean(listItem[2]);
+      const list = document.createElement(ordered ? "ol" : "ul");
+      while (index < lines.length) {
+        const item = lines[index].match(/^\s*(?:([-+*])|(\d+)\.)\s+(.+)$/);
+        if (!item || Boolean(item[2]) !== ordered) break;
+        const li = document.createElement("li");
+        appendInlineMarkdown(li, item[3]);
+        list.append(li);
+        index++;
+      }
+      container.append(list);
+      continue;
+    }
+
+    const paragraphLines = [line];
+    index++;
+    while (index < lines.length && lines[index].trim() && !isMarkdownBlockStart(lines[index])) {
+      paragraphLines.push(lines[index++]);
+    }
+    const paragraph = document.createElement("p");
+    appendInlineMarkdown(paragraph, paragraphLines.join("\n"));
+    container.append(paragraph);
+  }
+  return container;
 }
 
 // ── MCP Policy Panel ──────────────────────────────────────────────

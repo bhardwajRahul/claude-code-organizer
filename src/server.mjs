@@ -5,7 +5,7 @@
  */
 
 import { createServer } from "node:http";
-import { readFile, stat, open } from "node:fs/promises";
+import { readFile, open } from "node:fs/promises";
 import { join, extname, resolve, isAbsolute } from "node:path";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
@@ -70,6 +70,21 @@ const BACKUP_EXCLUDED_CATEGORIES = new Set(["setting", "hook", "session", "histo
 const MAX_REQUEST_BODY_BYTES = 1024 * 1024;
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 const fileWriteQueues = new Map();
+const SECURITY_HEADERS = {
+  "Content-Security-Policy": [
+    "default-src 'none'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src https://fonts.gstatic.com",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'none'",
+  ].join("; "),
+  "Referrer-Policy": "no-referrer",
+  "X-Content-Type-Options": "nosniff",
+};
 
 function itemFilePaths(item) {
   const paths = [item?.path, item?.openPath].filter(Boolean);
@@ -262,7 +277,7 @@ async function ensureBackupRepo(backupDir) {
 // ── Request helpers ──────────────────────────────────────────────────
 
 function json(res, data, status = 200) {
-  res.writeHead(status, { "Content-Type": "application/json" });
+  res.writeHead(status, { ...SECURITY_HEADERS, "Content-Type": "application/json" });
   res.end(JSON.stringify(data));
 }
 
@@ -298,10 +313,10 @@ async function serveFile(res, filePath) {
   try {
     const content = await readFile(filePath);
     const mime = MIME[extname(filePath)] || "application/octet-stream";
-    res.writeHead(200, { "Content-Type": mime });
+    res.writeHead(200, { ...SECURITY_HEADERS, "Content-Type": mime });
     res.end(content);
   } catch {
-    res.writeHead(404);
+    res.writeHead(404, SECURITY_HEADERS);
     res.end("Not found");
   }
 }
@@ -814,14 +829,29 @@ async function handleRequest(req, res) {
       return json(res, { ok: false, error: "Invalid or disallowed session path" }, 400);
     }
     try {
-      const fileStat = await stat(filePath);
-      const fileSize = fileStat.size;
-
-      // Read first 4KB for title (aiTitle is near the top)
-      const headSize = Math.min(4096, fileSize);
       const fh = await open(filePath, "r");
-      const headBuf = Buffer.alloc(headSize);
-      await fh.read(headBuf, 0, headSize, 0);
+      let fileSize;
+      let headBuf;
+      let tailBuf;
+      let tailSize;
+      try {
+        const fileStat = await fh.stat();
+        if (!fileStat.isFile()) throw new Error("Session path is not a regular file");
+        fileSize = fileStat.size;
+
+        // Read first 4KB for title (aiTitle is near the top)
+        const headSize = Math.min(4096, fileSize);
+        headBuf = Buffer.alloc(headSize);
+        await fh.read(headBuf, 0, headSize, 0);
+
+        // Read last 256KB for recent messages (enough for ~20 text messages)
+        tailSize = Math.min(256 * 1024, fileSize);
+        tailBuf = Buffer.alloc(tailSize);
+        await fh.read(tailBuf, 0, tailSize, fileSize - tailSize);
+      } finally {
+        await fh.close();
+      }
+
       let title = null;
       for (const line of headBuf.toString("utf-8").split("\n").slice(0, 10)) {
         try {
@@ -830,12 +860,6 @@ async function handleRequest(req, res) {
           if (e.type === "session_meta" && e.payload?.cwd) title ||= e.payload.cwd;
         } catch {}
       }
-
-      // Read last 256KB for recent messages (enough for ~20 text messages)
-      const tailSize = Math.min(256 * 1024, fileSize);
-      const tailBuf = Buffer.alloc(tailSize);
-      await fh.read(tailBuf, 0, tailSize, fileSize - tailSize);
-      await fh.close();
 
       const tailRaw = tailBuf.toString("utf-8");
       // Skip first partial line if we didn't read from start
@@ -982,7 +1006,7 @@ async function handleRequest(req, res) {
     }
     try {
       const { distillSession } = await import("./session-distiller.mjs");
-      const result = await distillSession(filePath);
+      const result = await distillSession(knownItem.path);
       invalidateCachedData(harnessId); // bust scan cache so new session appears
       cachedData = null;
       return json(res, {
@@ -1479,19 +1503,19 @@ async function handleRequest(req, res) {
     try {
       const content = await readFile(join(import.meta.dirname, "effective.mjs"), "utf-8");
       const browserCode = "(function(){\n" + content.replace(/^export /gm, "") + "\n})();";
-      res.writeHead(200, { "Content-Type": "application/javascript" });
+      res.writeHead(200, { ...SECURITY_HEADERS, "Content-Type": "application/javascript" });
       return res.end(browserCode);
-    } catch { res.writeHead(404); return res.end(); }
+    } catch { res.writeHead(404, SECURITY_HEADERS); return res.end(); }
   }
 
   // Suppress favicon 404
   if (path === "/favicon.ico") {
-    res.writeHead(204);
+    res.writeHead(204, SECURITY_HEADERS);
     return res.end();
   }
 
   // ── 404 ──
-  res.writeHead(404);
+  res.writeHead(404, SECURITY_HEADERS);
   res.end("Not found");
 }
 
@@ -1535,6 +1559,7 @@ export function startServer(port = 3847, maxRetries = 10) {
     // SSE heartbeat endpoint — tracks connected browser tabs
     if (url.pathname === "/heartbeat") {
       res.writeHead(200, {
+        ...SECURITY_HEADERS,
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
@@ -1559,8 +1584,11 @@ export function startServer(port = 3847, maxRetries = 10) {
       await handleRequest(req, res);
     } catch (err) {
       const status = err.statusCode || 500;
-      if (status >= 500) console.error("Error:", err.message);
-      res.writeHead(status, { "Content-Type": "application/json" });
+      if (status >= 500) {
+        const message = String(err?.message || "Unknown error").replace(/[\r\n\u2028\u2029]/g, " ");
+        console.error("Error:", message);
+      }
+      res.writeHead(status, { ...SECURITY_HEADERS, "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: false, error: err.message }));
     }
   });

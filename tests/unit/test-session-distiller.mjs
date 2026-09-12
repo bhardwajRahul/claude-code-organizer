@@ -131,6 +131,26 @@ describe("session-distiller", () => {
     });
   });
 
+  it("escapes backslashes in index cells and strips angle markup from generated titles", async () => {
+    await withTempDir(async dir => {
+      const data = fixture("BACKSLASH");
+      data.records = data.records.filter(value => value.type !== "ai-title");
+      data.records[1].message.content[1].name = "Tool\\Name";
+      data.records[0].message.content = "Useful <script><script>alert(1)</script> session title";
+      const source = await writeFixture(dir, "markup.jsonl", data);
+      const result = await distillSession(source, {
+        outputDir: dir,
+        sessionId: "abababab-abab-4bab-8bab-abababababab",
+      });
+
+      const output = parseJsonl(await readFile(result.outputPath, "utf-8"));
+      assert.doesNotMatch(output[0].aiTitle, /[<>]/);
+      assert.match(output[0].aiTitle, /Useful/);
+      const index = await readFile(result.stats.indexPath, "utf-8");
+      assert.match(index, /Tool\\\\Name/);
+    });
+  });
+
   it("fails closed on malformed JSONL and never overwrites its source", async () => {
     await withTempDir(async dir => {
       const source = join(dir, "cccccccc-cccc-4ccc-8ccc-cccccccccccc.jsonl");

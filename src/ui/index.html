@@ -6,7 +6,6 @@
   <title>Cross-Code Organizer (CCO)</title>
   <link rel="stylesheet" href="/style.css">
   <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
 </head>
 <body>
   <div class="app" id="app">
@@ -468,11 +467,6 @@
 
   <div class="toast hidden" id="toast"><span id="toastMsg">Done</span></div>
 
-  <script>
-    // SSE heartbeat — tells server this tab is alive.
-    // Server auto-shuts down when all tabs close.
-    new EventSource("/heartbeat");
-  </script>
   <script src="/effective.mjs"></script>
   <script src="/app.js"></script>
 </body>

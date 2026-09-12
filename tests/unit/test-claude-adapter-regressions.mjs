@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { scanHarness } from '../../src/harness/scanner-framework.mjs';
 import { claudeAdapter } from '../../src/harness/adapters/claude.mjs';
+import { stripHtmlComments } from '../../src/harness/adapters/claude-context-budget.mjs';
 
 function encodeClaudeProjectName(realPath) {
   return realPath.replace(/[^A-Za-z0-9-]/g, '-');
@@ -35,6 +36,12 @@ async function createSkill(root, name, heading = name) {
 }
 
 describe('Claude adapter regressions from scanner PRs', () => {
+  it('strips nested and unclosed HTML comments without leaving comment payloads', () => {
+    assert.equal(stripHtmlComments('before <!-- hidden <!-- nested --> after'), 'before  after');
+    assert.equal(stripHtmlComments('before <!-- never closes'), 'before ');
+    assert.equal(stripHtmlComments('plain text'), 'plain text');
+  });
+
   it('scans user and project plugin-provided skills from installed_plugins.json', async () => {
     const env = await createClaudeHome();
     try {

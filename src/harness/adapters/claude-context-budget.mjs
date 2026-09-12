@@ -81,7 +81,17 @@ export async function expandImports(text, basePath, depth = 0, options = {}) {
  * Official docs: "Block-level HTML comments are stripped before injection."
  */
 export function stripHtmlComments(text) {
-  return text.replace(/<!--[\s\S]*?-->/g, "");
+  let clean = "";
+  let offset = 0;
+  while (offset < text.length) {
+    const start = text.indexOf("<!--", offset);
+    if (start === -1) return clean + text.slice(offset);
+    clean += text.slice(offset, start);
+    const end = text.indexOf("-->", start + 4);
+    if (end === -1) return clean;
+    offset = end + 3;
+  }
+  return clean;
 }
 
 async function countContextTokens(text) {

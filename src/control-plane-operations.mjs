@@ -9,8 +9,9 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import {
-  cp, lstat, mkdir, readFile, readdir, rename, rm, writeFile,
+  cp, lstat, mkdir, open, readFile, readdir, rename, rm, writeFile,
 } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
 import { basename, join, resolve, sep } from "node:path";
 
 const REPAIRABLE_CATEGORIES = new Set(["skill", "command", "agent", "memory", "rule", "instruction"]);
@@ -30,8 +31,16 @@ async function hashEntry(hash, root, current) {
     return;
   }
   if (!stat.isFile()) throw new Error("Unsupported filesystem entry");
-  hash.update(`f:${relativeName}:${stat.size}\n`);
-  hash.update(await readFile(current));
+  const flags = fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW || 0);
+  const handle = await open(current, flags);
+  try {
+    const openedStat = await handle.stat();
+    if (!openedStat.isFile()) throw new Error("Unsupported filesystem entry");
+    hash.update(`f:${relativeName}:${openedStat.size}\n`);
+    hash.update(await handle.readFile());
+  } finally {
+    await handle.close();
+  }
 }
 
 export async function fingerprintPath(path) {

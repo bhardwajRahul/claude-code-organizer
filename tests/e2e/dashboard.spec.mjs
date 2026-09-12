@@ -373,6 +373,15 @@ test.describe('API Layer', () => {
     expect(data.scopes.find(s => s.id === 'global')).toBeTruthy();
   });
 
+  test('dashboard responses enforce a restrictive content security policy', async () => {
+    const res = await fetch(env.baseURL);
+    const policy = res.headers.get('content-security-policy');
+    expect(policy).toContain("default-src 'none'");
+    expect(policy).toContain("script-src 'self'");
+    expect(policy).not.toContain("script-src 'unsafe-inline'");
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+  });
+
   test('scan detects all 4 scope levels', async () => {
     const { scopes } = await (await fetch(`${env.baseURL}/api/scan`)).json();
 
@@ -776,7 +785,8 @@ test.describe('API Layer', () => {
   test('POST /api/save-markdown updates a scanned memory but rejects an arbitrary HOME file', async () => {
     const { items } = await (await fetch(`${env.baseURL}/api/scan`)).json();
     const mem = items.find(i => i.name === 'user_prefs');
-    const original = await readFile(mem.path, 'utf-8');
+    const originalResponse = await fetch(`${env.baseURL}/api/file-content?path=${encodeURIComponent(mem.path)}`);
+    const original = (await originalResponse.json()).content;
     const updated = '# Updated memory\n\nUse TypeScript everywhere.\n';
 
     const save = await fetch(`${env.baseURL}/api/save-markdown`, {
@@ -1194,14 +1204,7 @@ test.describe('UI Rendering', () => {
     await page.click('#detailClose');
   });
 
-  test('detail panel previews markdown-backed skills, memories, and agents even if markdown parser fails', async ({ page }) => {
-    await page.addInitScript(() => {
-      Object.defineProperty(window, 'marked', {
-        configurable: true,
-        value: { parse: () => { throw new Error('marked failed'); } },
-      });
-    });
-
+  test('detail panel previews markdown-backed skills, memories, and agents without a CDN parser', async ({ page }) => {
     await page.goto(env.baseURL);
     await page.waitForSelector('#loading', { state: 'hidden' });
     await page.locator('.s-scope-hdr[data-scope-id="global"] .s-nm').click();
@@ -1219,6 +1222,48 @@ test.describe('UI Rendering', () => {
       await row.click();
       await expect(page.locator('#previewContent')).toContainText(expected);
       await expect(page.locator('#previewContent')).not.toContainText('Failed to load preview');
+    }
+  });
+
+  test('markdown and session previews render untrusted HTML as inert text', async ({ page }) => {
+    const memoryPath = join(env.dirs.globalMem, 'user_prefs.md');
+    const sessionPath = join(env.tmpDir, '.claude', 'projects', env.encodedProject, 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl');
+    const [originalMemory, originalSession] = await Promise.all([
+      readFile(memoryPath, 'utf-8'),
+      readFile(sessionPath, 'utf-8'),
+    ]);
+    const payload = '<img src=x onerror="window.__ccoXss=1"><script>window.__ccoXss=2</script>';
+
+    try {
+      await writeFile(memoryPath, `---\nname: user_prefs\ndescription: safe preview test\n---\n# Safe heading\n${payload}\n[unsafe](javascript:alert(1))\n**bold** and \`code\``);
+      const sessionRows = originalSession.trim().split('\n').map(JSON.parse);
+      sessionRows[4].aiTitle = payload;
+      sessionRows[5].message.content[0].text = payload;
+      await writeFile(sessionPath, sessionRows.map(JSON.stringify).join('\n') + '\n');
+
+      await page.goto(env.baseURL);
+      await page.waitForSelector('#loading', { state: 'hidden' });
+      await page.locator('.s-scope-hdr[data-scope-id="global"] .s-nm').click();
+      await page.locator('.item', { hasText: 'user_prefs' }).click();
+      await expect(page.locator('#previewContent h1')).toHaveText('Safe heading');
+      await expect(page.locator('#previewContent strong')).toHaveText('bold');
+      await expect(page.locator('#previewContent code')).toHaveText('code');
+      await expect(page.locator('#previewContent img, #previewContent script')).toHaveCount(0);
+      await expect(page.locator('#previewContent a[href^="javascript:"]')).toHaveCount(0);
+      await expect(page.locator('#previewContent')).toContainText('<img src=x');
+
+      await page.locator(`.s-scope-hdr[data-scope-id="${env.encodedProject}"] .s-nm`).click();
+      const maliciousSession = page.locator('.item[data-category="session"]', { hasText: '<img src=x' });
+      await expect(maliciousSession.locator('img, script')).toHaveCount(0);
+      await maliciousSession.click();
+      await expect(page.locator('#previewContent img, #previewContent script')).toHaveCount(0);
+      await expect(page.locator('#previewContent')).toContainText('<img src=x');
+      expect(await page.evaluate(() => window.__ccoXss)).toBeUndefined();
+    } finally {
+      await Promise.all([
+        writeFile(memoryPath, originalMemory),
+        writeFile(sessionPath, originalSession),
+      ]);
     }
   });
 

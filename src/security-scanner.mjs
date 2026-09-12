@@ -65,7 +65,13 @@ function stripBidiControls(text) {
 
 /** Strip HTML comment markers but KEEP the content inside (for scanning). */
 function stripHtmlComments(text) {
-  return text.replace(/<!--([\s\S]*?)-->/g, "$1");
+  let clean = "";
+  for (let index = 0; index < text.length;) {
+    if (text.startsWith("<!--", index)) index += 4;
+    else if (text.startsWith("-->", index)) index += 3;
+    else clean += text[index++];
+  }
+  return clean;
 }
 
 /**
