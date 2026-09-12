@@ -17,7 +17,7 @@ Official harness UIs now expose more of their own skills and plugins, so a singl
 - Last source commit before this review: 2026-06-06 (3 months 5 days).
 - Latest npm release: 0.19.3 on 2026-04-28 (4 months 14 days).
 - Baseline tests before changes: 132 unit and 121 E2E.
-- Current tests after changes: 168 unit and 212 E2E, 380 total.
+- Current tests after changes: 170 unit and 212 E2E, 382 total.
 - Dependency audit before changes: 8 advisories (4 high, 3 moderate, 1 low).
 - Dependency audit after changes: 0 advisories.
 - Package dry run excludes local experimental `session-distiller-v2` through `v5` files.
@@ -35,7 +35,7 @@ Official harness UIs now expose more of their own skills and plugins, so a singl
 - Added Codex hook-script inventory.
 - Migrated MCP tools to the current registration API and supplied read-only, destructive, idempotent, and open-world annotations.
 - Fixed issue #35's unquoted YAML `argument-hint`.
-- Rebuilt Session Distiller's resume graph and added exact-snapshot, malformed-input, concurrency, and real-resume verification.
+- Rebuilt Session Distiller's resume graph, restricted it to Claude's active branch across compact boundaries, and added exact-snapshot, malformed-input, concurrency, branch, and real-resume verification.
 - Updated MCP and Playwright dependencies, synchronized package metadata, corrected privacy disclosures, and documented the research-corpus false-positive boundary.
 - Added Harness Doctor with an adapter-aware Effective Context Map, explainable hygiene score, fingerprinted reversible repair, copy-only skill migration, and disabled-by-default local aggregate metrics.
 

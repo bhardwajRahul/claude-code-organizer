@@ -10,7 +10,7 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-380%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-382%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
 [![Telemetry: Explicit Opt-in](https://img.shields.io/badge/telemetry-explicit%20opt--in-blue)](PRIVACY.md)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [![Activation Scanner](https://img.shields.io/badge/Activation-Scanner%20Preview-purple)](research/README.md)
@@ -226,6 +226,8 @@ Claude Code sessions grow fast. After a few hours of coding, a single session ca
 
 Session Distiller creates a new, independently resumable session. It keeps user and assistant text blocks verbatim, removes harness noise and hidden thinking, and turns tool protocol into concise text:
 
+It follows Claude Code's active `parentUuid` branch, crosses `compact_boundary.logicalParentUuid` links to recover the selected pre-compact history, and excludes abandoned rewind branches. It never edits the source transcript.
+
 - **Tool calls** — keeps the operation and the input needed to understand intent
 - **Small results** — keeps a concise inline result
 - **Large results** — keeps a preview plus an exact backup line/index reference
@@ -407,7 +409,7 @@ MIT
 - Added full in-dashboard Markdown editing with conflict-safe serialized frontmatter saves
 - Rebuilt Session Distiller with exact backups, fresh UUIDs, a valid resume chain, and harness gating
 - Hardened the local server, modernized MCP tool annotations, and updated dependencies
-- Added regression coverage; 380 tests pass (168 unit + 212 E2E)
+- Added regression coverage; 382 tests pass (170 unit + 212 E2E)
 
 ### 2026-04-28
 - v0.19.3: Fixed Claude Code preview loading for markdown-backed skills, memories, and agents when the markdown renderer fails

@@ -266,6 +266,42 @@ function extractTitle(records) {
   return "Untitled session";
 }
 
+/**
+ * Resolve the branch Claude Code would resume, while crossing compact
+ * boundaries back into their pre-compact active branch. Returning null is a
+ * fail-open compatibility fallback for legacy or incomplete transcript graphs:
+ * distillation keeps records instead of silently discarding uncertain history.
+ */
+function activeRecordUuids(records) {
+  const byUuid = new Map();
+  for (const record of records) {
+    const uuid = record.entry?.uuid;
+    if (!uuid) continue;
+    if (byUuid.has(uuid)) return null;
+    byUuid.set(uuid, record.entry);
+  }
+  if (byUuid.size === 0) return null;
+
+  const lastPrompt = [...records].reverse().find(({ entry }) => entry.type === "last-prompt");
+  let cursor = lastPrompt?.entry?.leafUuid;
+  if (!cursor || !byUuid.has(cursor)) {
+    cursor = [...records].reverse().find(({ entry }) => entry.uuid)?.entry.uuid;
+  }
+  if (!cursor) return null;
+
+  const active = new Set();
+  while (cursor) {
+    if (active.has(cursor)) return null;
+    const entry = byUuid.get(cursor);
+    if (!entry) return null;
+    active.add(cursor);
+    cursor = entry.type === "system" && entry.subtype === "compact_boundary" && entry.logicalParentUuid
+      ? entry.logicalParentUuid
+      : entry.parentUuid;
+  }
+  return active;
+}
+
 async function pathExists(path) {
   try { await access(path); return true; } catch { return false; }
 }
@@ -303,11 +339,18 @@ export async function distillSession(inputPath, opts = {}) {
   const byType = {};
   const conversation = [];
   let keptSourceRecords = 0;
+  let skippedInactiveRecords = 0;
+  const activeUuids = activeRecordUuids(records);
 
   for (const { entry, line } of records) {
     const type = entry.type || "unknown";
     byType[type] = (byType[type] || 0) + 1;
     state.origLine = line;
+
+    if (activeUuids && entry.uuid && !activeUuids.has(entry.uuid)) {
+      skippedInactiveRecords++;
+      continue;
+    }
 
     if (DROP_RECORD_TYPES.has(type) || type === "ai-title") continue;
     const role = entry.message?.role;
@@ -407,6 +450,7 @@ export async function distillSession(inputPath, opts = {}) {
       indexEntries: state.indexEntries.length,
       indexPath: hasIndex ? indexPath : null,
       unsupportedBlockTypes: [...state.unsupportedBlockTypes].sort(),
+      skippedInactiveRecords,
       byType,
     },
   };

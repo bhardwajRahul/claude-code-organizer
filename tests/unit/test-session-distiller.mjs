@@ -176,4 +176,79 @@ describe("session-distiller", () => {
       assert.doesNotMatch(secondIndex, /FIRST/);
     });
   });
+
+  it("keeps only the resumable branch and crosses compact boundaries into its original history", async () => {
+    await withTempDir(async dir => {
+      const source = join(dir, "branched.jsonl");
+      const rows = [
+        record("user", "root-user", null, { role: "user", content: "ROOT ACTIVE" }),
+        record("assistant", "root-assistant", "root-user", { role: "assistant", content: "ROOT ANSWER" }),
+        record("user", "abandoned-user", "root-assistant", { role: "user", content: "ABANDONED BRANCH" }),
+        record("assistant", "abandoned-assistant", "abandoned-user", { role: "assistant", content: "ABANDONED ANSWER" }),
+        record("user", "active-user", "root-assistant", { role: "user", content: "ACTIVE BEFORE COMPACT" }),
+        {
+          type: "system",
+          subtype: "compact_boundary",
+          uuid: "compact-boundary",
+          parentUuid: null,
+          logicalParentUuid: "active-user",
+          sessionId: OLD_SESSION_ID,
+        },
+        record("user", "compact-summary", "compact-boundary", {
+          role: "user",
+          content: "LOSSY COMPACT SUMMARY",
+        }, { isCompactSummary: true }),
+        record("assistant", "active-after-compact", "compact-summary", {
+          role: "assistant",
+          content: "ACTIVE AFTER COMPACT",
+        }),
+        { type: "last-prompt", sessionId: OLD_SESSION_ID, leafUuid: "active-after-compact" },
+      ];
+      await writeFile(source, rows.map(value => JSON.stringify(value)).join("\n") + "\n");
+
+      const result = await distillSession(source, {
+        outputDir: dir,
+        sessionId: "12121212-1212-4212-8212-121212121212",
+      });
+      const output = await readFile(result.outputPath, "utf-8");
+
+      assert.match(output, /ROOT ACTIVE/);
+      assert.match(output, /ROOT ANSWER/);
+      assert.match(output, /ACTIVE BEFORE COMPACT/);
+      assert.match(output, /ACTIVE AFTER COMPACT/);
+      assert.doesNotMatch(output, /ABANDONED BRANCH|ABANDONED ANSWER/);
+      assert.doesNotMatch(output, /LOSSY COMPACT SUMMARY/);
+      assert.equal(result.stats.skippedInactiveRecords, 2);
+    });
+  });
+
+  it("keeps all conversation records when duplicate UUIDs make the graph ambiguous", async () => {
+    await withTempDir(async dir => {
+      const source = join(dir, "duplicate-uuid.jsonl");
+      const rows = [
+        record("user", "root-user", null, { role: "user", content: "ROOT RECORD" }),
+        record("assistant", "duplicate", "root-user", {
+          role: "assistant",
+          content: "FIRST DUPLICATE RECORD",
+        }),
+        record("user", "duplicate", "root-user", {
+          role: "user",
+          content: "SECOND DUPLICATE RECORD",
+        }),
+        { type: "last-prompt", sessionId: OLD_SESSION_ID, leafUuid: "duplicate" },
+      ];
+      await writeFile(source, rows.map(value => JSON.stringify(value)).join("\n") + "\n");
+
+      const result = await distillSession(source, {
+        outputDir: dir,
+        sessionId: "13131313-1313-4313-8313-131313131313",
+      });
+      const output = await readFile(result.outputPath, "utf-8");
+
+      assert.match(output, /ROOT RECORD/);
+      assert.match(output, /FIRST DUPLICATE RECORD/);
+      assert.match(output, /SECOND DUPLICATE RECORD/);
+      assert.equal(result.stats.skippedInactiveRecords, 0);
+    });
+  });
 });
