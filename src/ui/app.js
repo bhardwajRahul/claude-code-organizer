@@ -83,6 +83,32 @@ let lastBackupFolder = "~/.claude-backups/latest";
 let doctorReport = null;
 let doctorMigrationPreview = null;
 
+const ALL_MEMORIES_SCOPE_ID = "virtual:all-memories";
+
+function addClientVirtualScopes(scanData) {
+  if (!scanData || scanData.harness?.id !== "claude") return scanData;
+  const memories = (scanData.items || []).filter((item) => item.category === "memory");
+  if (memories.length === 0) return scanData;
+  scanData.scopeTypes ||= [];
+  scanData.scopes ||= [];
+  if (!scanData.scopeTypes.some((type) => type.id === "aggregate")) {
+    scanData.scopeTypes.push({ id: "aggregate", label: "Aggregate", icon: "🧠", isGlobal: false });
+  }
+  if (!scanData.scopes.some((scope) => scope.id === ALL_MEMORIES_SCOPE_ID)) {
+    scanData.scopes.splice(1, 0, {
+      id: ALL_MEMORIES_SCOPE_ID,
+      name: "All Memories",
+      type: "aggregate",
+      tag: "across all projects",
+      parentId: null,
+      repoDir: null,
+      configDir: null,
+      virtual: true,
+    });
+  }
+  return scanData;
+}
+
 const uiState = {
   expandedScopes: new Set(),
   collapsedCats: new Set(),
@@ -146,7 +172,7 @@ async function init() {
       }
     }
 
-    data = await fetchJson(apiUrl("/api/scan"));
+    data = addClientVirtualScopes(await fetchJson(apiUrl("/api/scan")));
     selectedHarnessId = data?.harness?.id || selectedHarnessId;
     localStorage.setItem("cco-selected-harness", selectedHarnessId);
     selectedScopeId = getInitialSelectedScopeId();
@@ -172,13 +198,13 @@ async function init() {
 // Key = version string (must match package.json exactly).
 const CHANGELOG = {
   "0.20.0": {
-    title: "Harness Doctor + OpenCode",
+    title: "Harness Doctor + More Harnesses",
     tagline: "See what every coding harness loads, then clean it safely.",
     changes: [
       "Harness Doctor maps effective context, explains hygiene deductions, and estimates context size per scope.",
       "Verified byte-identical duplicates can be archived with a fingerprinted backup and safe Undo.",
-      "Copy portable SKILL.md bundles between Claude Code, Codex CLI, and OpenCode with a conflict preview.",
-      "OpenCode inventory, in-dashboard Markdown editing, and a rebuilt resumable Session Distiller.",
+      "Copy portable SKILL.md bundles between Claude Code, Codex CLI, OpenCode, and DeepSeek Harness with a conflict preview.",
+      "OpenCode and DeepSeek Harness inventory, All Memories body search, in-dashboard Markdown editing, and a rebuilt resumable Session Distiller.",
       "Optional anonymous metrics are off by default; when enabled, CCO submits a deduplicated rotating activity signal each month.",
     ],
   },
@@ -296,7 +322,7 @@ async function switchHarness(harnessId) {
     loading.classList.remove("hidden");
   }
 
-  data = await fetchJson(apiUrl("/api/scan"));
+  data = addClientVirtualScopes(await fetchJson(apiUrl("/api/scan")));
   selectedHarnessId = data?.harness?.id || harnessId;
   localStorage.setItem("cco-selected-harness", selectedHarnessId);
   selectedScopeId = getInitialSelectedScopeId();
@@ -468,14 +494,15 @@ function updateCapabilityVisibility() {
   const effectiveBtn = document.getElementById("inheritToggleBtn");
   const exportBtn = document.getElementById("exportBtn");
 
-  ctxBtn?.classList.toggle("hidden", !hasCapability("contextBudget"));
-  mcpBtn?.classList.toggle("hidden", !hasCapability("mcpControls"));
-  effectiveBtn?.classList.toggle("hidden", !hasCapability("effective"));
+  const isVirtualScope = Boolean(getScopeById(selectedScopeId)?.virtual);
+  ctxBtn?.classList.toggle("hidden", !hasCapability("contextBudget") || isVirtualScope);
+  mcpBtn?.classList.toggle("hidden", !hasCapability("mcpControls") || isVirtualScope);
+  effectiveBtn?.classList.toggle("hidden", !hasCapability("effective") || isVirtualScope);
   exportBtn?.classList.toggle("hidden", !hasCapability("backup"));
 
-  if (!hasCapability("contextBudget")) closeContextBudget();
-  if (!hasCapability("mcpControls")) closeMcpControlsPanel();
-  if (!hasCapability("effective")) {
+  if (!hasCapability("contextBudget") || isVirtualScope) closeContextBudget();
+  if (!hasCapability("mcpControls") || isVirtualScope) closeMcpControlsPanel();
+  if (!hasCapability("effective") || isVirtualScope) {
     showEffective = false;
     effectiveShadowedKeys = new Set();
     effectiveConflictKeys = new Set();
@@ -498,7 +525,11 @@ function setupSidebarTree() {
     if (catRow) {
       selectedScopeId = catRow.dataset.scopeId;
       expandScopePath(selectedScopeId);
-      if (hasCapability("contextBudget") && isContextBudgetOpen()) {
+      const isVirtualScope = Boolean(getScopeById(selectedScopeId)?.virtual);
+      if (isVirtualScope) {
+        closeContextBudget();
+        closeMcpControlsPanel();
+      } else if (hasCapability("contextBudget") && isContextBudgetOpen()) {
         openContextBudget(selectedScopeId);
       } else if (hasCapability("mcpControls") && !document.getElementById("mcpControlsPanel").classList.contains("hidden")) {
         openMcpControlsPanel();
@@ -530,7 +561,11 @@ function setupSidebarTree() {
     showEffective = false; effectiveShadowedKeys = new Set(); effectiveConflictKeys = new Set(); effectiveAncestorKeys = new Set();
     document.getElementById("inheritToggleBtn")?.classList.remove("active");
     expandScopePath(selectedScopeId);
-    if (hasCapability("contextBudget") && isContextBudgetOpen()) {
+    const isVirtualScope = Boolean(getScopeById(selectedScopeId)?.virtual);
+    if (isVirtualScope) {
+      closeContextBudget();
+      closeMcpControlsPanel();
+    } else if (hasCapability("contextBudget") && isContextBudgetOpen()) {
       openContextBudget(selectedScopeId);
     } else if (hasCapability("mcpControls") && !document.getElementById("mcpControlsPanel").classList.contains("hidden")) {
       openMcpControlsPanel();
@@ -1051,7 +1086,7 @@ function renderSidebar() {
 function renderSidebarScopeTree(scope) {
   if (scope.id === "global") {
     // Under global, render path-nested projects
-    const allProjects = (data?.scopes || []).filter(s => s.id !== "global" && scopeVisibleInSidebar(s));
+    const allProjects = (data?.scopes || []).filter(s => s.id !== "global" && !s.virtual && scopeVisibleInSidebar(s));
     // Sort by path depth then name
     allProjects.sort((a, b) => {
       const da = (a.repoDir || "").split("/").length;
@@ -1156,7 +1191,7 @@ function renderPills() {
   const container = document.getElementById("pills");
   // Count items for the currently selected scope, plus Global effective items if showEffective
   let scopeItems = selectedScopeId
-    ? (data?.items || []).filter((i) => i.scopeId === selectedScopeId)
+    ? getItemsForScope(selectedScopeId)
     : data?.items || [];
   if (showEffective && selectedScopeId && selectedScopeId !== "global") {
     const globalItems = (data?.items || []).filter(
@@ -1230,7 +1265,7 @@ function renderRuleBar() {
   const content = document.getElementById("ruleBarContent");
   if (!bar || !toggle || !content) return;
 
-  if (!hasCapability("effective") || !showEffective || !selectedScopeId || selectedScopeId === "global") {
+  if (!hasCapability("effective") || !showEffective || !selectedScopeId || selectedScopeId === "global" || getScopeById(selectedScopeId)?.virtual) {
     bar.classList.add("hidden");
     return;
   }
@@ -1345,7 +1380,7 @@ function renderMainContent() {
 function enableShowEffective() {
   if (!hasCapability("effective")) return;
   const scope = getScopeById(selectedScopeId);
-  if (!scope || scope.id === "global") return;
+  if (!scope || scope.id === "global" || scope.virtual) return;
   showEffective = true;
   computeEffectiveSets(selectedScopeId);
   document.getElementById("inheritToggleBtn")?.classList.add("active");
@@ -1353,7 +1388,7 @@ function enableShowEffective() {
 }
 
 function renderContextualEffectivePrompt(scopeId, category, localItems) {
-  if (!hasCapability("effective") || showEffective || scopeId === "global" || searchQuery) return "";
+  if (!hasCapability("effective") || showEffective || scopeId === "global" || getScopeById(scopeId)?.virtual || searchQuery) return "";
   if (!getEffectiveRule(category) || localItems.length > 2) return "";
 
   const localNames = new Set(localItems.map((item) => item.name));
@@ -1494,6 +1529,10 @@ function renderItem(item) {
                        : isFromAncestor ? `<span class="scope-tag st-ancestor" data-tooltip="${esc(ancestorTip)}">Ancestor</span>`
                        : isFromGlobal   ? `<span class="scope-tag st-global" data-tooltip="${esc(globalTip)}">Global</span>`
                        : "";
+  const originScope = selectedScopeId === ALL_MEMORIES_SCOPE_ID ? getScopeById(item.scopeId) : null;
+  const originBadge = originScope
+    ? `<span class="scope-tag st-ancestor" data-tooltip="Stored in ${esc(originScope.name)}">${esc(originScope.name)}</span>`
+    : "";
   const isMcpDisabled = item.category === "mcp" && mcpDisabledNames.has(item.name);
   const mcpToggleBtn = item.category === "mcp" && hasCapability("mcpControls")
     ? `<button type="button" class="act-btn ${isMcpDisabled ? "act-mcp-enable" : "act-mcp-disable"}" data-action="mcp-toggle" data-mcp-name="${esc(item.name)}" title="${isMcpDisabled ? "Re-enable in this project" : "Disable in this project"}">${isMcpDisabled ? "Enable" : "Disable"}</button>`
@@ -1513,7 +1552,9 @@ function renderItem(item) {
       ${mcpToggleBtn}
     </span>`);
 
-  const dragHandle = item.locked ? "" : `<span class="drag-handle" title="Drag to move">⠿</span>`;
+  const dragHandle = item.locked || selectedScopeId === ALL_MEMORIES_SCOPE_ID
+    ? ""
+    : `<span class="drag-handle" title="Drag to move">⠿</span>`;
 
   // Security badge for MCP items
   const secSev = item.category === "mcp" ? getSecuritySeverity(item.name) : null;
@@ -1534,7 +1575,7 @@ function renderItem(item) {
       ${dragHandle}
       ${checkbox}
       <span class="item-ico">${icon}</span>
-      ${effectiveBadge}
+      ${effectiveBadge}${originBadge}
       <span class="item-name">${esc(item.name)}</span>
       ${secBadgeHtml}${blFlagHtml}${isMcpDisabled ? `<span class="mcp-disabled-badge" title="Disabled in this project — all servers named '${esc(item.name)}' won't load here">Disabled</span>` : ""}
       ${badgeHtml}
@@ -2425,7 +2466,7 @@ function setupBackupModal() {
 
 function setupContextBudget() {
   document.getElementById("ctxBudgetBtn").addEventListener("click", () => {
-    if (!hasCapability("contextBudget")) return;
+    if (!hasCapability("contextBudget") || getScopeById(selectedScopeId)?.virtual) return;
     if (!selectedScopeId) {
       toast("Select a scope first", true);
       return;
@@ -2438,7 +2479,7 @@ function setupContextBudget() {
   document.getElementById("inheritToggleBtn")?.addEventListener("click", () => {
     if (!hasCapability("effective")) return;
     const scope = getScopeById(selectedScopeId);
-    if (!scope || scope.id === "global") return;
+    if (!scope || scope.id === "global" || scope.virtual) return;
     showEffective = !showEffective;
     computeEffectiveSets(selectedScopeId);
     document.getElementById("inheritToggleBtn").classList.toggle("active", showEffective);
@@ -2447,7 +2488,7 @@ function setupContextBudget() {
 }
 
 function openContextBudget(scopeId) {
-  if (!hasCapability("contextBudget")) return;
+  if (!hasCapability("contextBudget") || getScopeById(scopeId)?.virtual) return;
   // Hide item detail panel, show context budget panel
   document.getElementById("detailPanel").classList.add("hidden");
   const panel = document.getElementById("ctxBudgetPanel");
@@ -3399,7 +3440,7 @@ async function refreshUI() {
   const selectedScopeBefore = selectedScopeId;
   const selectedItemBefore = selectedItem ? itemKey(selectedItem) : null;
 
-  data = await fetchJson(apiUrl("/api/scan"));
+  data = addClientVirtualScopes(await fetchJson(apiUrl("/api/scan")));
 
   selectedScopeId = data.scopes.some((scope) => scope.id === selectedScopeBefore)
     ? selectedScopeBefore
@@ -3614,7 +3655,7 @@ function normalizeState() {
 
   if (selectedItem) {
     const nextItem = getItemByKey(itemKey(selectedItem));
-    if (!nextItem || nextItem.scopeId !== selectedScopeId || !itemVisibleInMain(nextItem)) {
+    if (!nextItem || !itemBelongsToScope(nextItem, selectedScopeId) || !itemVisibleInMain(nextItem)) {
       selectedItem = null;
       detailPreviewKey = null;
     } else {
@@ -3643,7 +3684,7 @@ function expandScopePath(scopeId) {
 
 function getInitialSelectedScopeId() {
   const scopesWithItems = data.scopes
-    .filter((scope) => getItemsForScope(scope.id).length > 0)
+    .filter((scope) => !scope.virtual && getItemsForScope(scope.id).length > 0)
     .sort((a, b) => {
       const depthDiff = getScopeDepth(b) - getScopeDepth(a);
       if (depthDiff !== 0) return depthDiff;
@@ -3663,7 +3704,15 @@ function getScopeById(scopeId) {
 }
 
 function getItemsForScope(scopeId) {
+  if (scopeId === ALL_MEMORIES_SCOPE_ID) {
+    return data.items.filter((item) => item.category === "memory");
+  }
   return data.items.filter((item) => item.scopeId === scopeId);
+}
+
+function itemBelongsToScope(item, scopeId) {
+  if (scopeId === ALL_MEMORIES_SCOPE_ID) return item.category === "memory";
+  return item.scopeId === scopeId;
 }
 
 function getChildScopes(scopeId) {
@@ -3770,7 +3819,7 @@ function computeEffectiveSets(scopeId) {
 
 function getVisibleItemsForScope(scopeId) {
   const ownItems = getItemsForScope(scopeId).filter((item) => itemVisibleInMain(item));
-  if (!hasCapability("effective") || !showEffective || scopeId === "global") return ownItems;
+  if (!hasCapability("effective") || !showEffective || scopeId === "global" || getScopeById(scopeId)?.virtual) return ownItems;
 
   // Use shared module for effective resolution, then apply UI filters
   const allEffective = getEffectiveItems(scopeId, data?.items || [], data?.scopes || []);
@@ -3783,7 +3832,7 @@ function getVisibleItemsForScope(scopeId) {
 }
 
 function itemVisibleInMain(item) {
-  return item.scopeId === selectedScopeId && itemMatchesFilters(item) && itemMatchesSearch(item);
+  return itemBelongsToScope(item, selectedScopeId) && itemMatchesFilters(item) && itemMatchesSearch(item);
 }
 
 function itemMatchesFilters(item) {
@@ -3798,6 +3847,7 @@ function itemMatchesSearch(item) {
     item.category,
     item.subType,
     item.path,
+    item.searchText,
   ].join(" ").toLowerCase();
   return text.includes(searchQuery);
 }
@@ -4181,7 +4231,7 @@ function setupMcpControls() {
   const btn = document.getElementById("mcpControlsBtn");
   if (!btn) return;
   btn.addEventListener("click", () => {
-    if (!hasCapability("mcpControls")) return;
+    if (!hasCapability("mcpControls") || getScopeById(selectedScopeId)?.virtual) return;
     document.getElementById("ctxBudgetPanel")?.classList.add("hidden");
     document.getElementById("securityPanel")?.classList.add("hidden");
     closeDetail();
@@ -4722,7 +4772,7 @@ function clearDoctorBadge() {
 
 async function refreshDoctorInventory() {
   const previousScope = selectedScopeId;
-  data = await fetchJson(apiUrl("/api/scan"));
+  data = addClientVirtualScopes(await fetchJson(apiUrl("/api/scan")));
   selectedScopeId = data.scopes.some(scope => scope.id === previousScope)
     ? previousScope
     : getInitialSelectedScopeId();

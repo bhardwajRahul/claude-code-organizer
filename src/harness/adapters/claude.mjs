@@ -521,6 +521,9 @@ async function scanMemories(scope) {
       name: fm.name || f.replace(".md", ""),
       fileName: f,
       description: fm.description || "",
+      // Local-only search index. The cap keeps /api/scan bounded while making
+      // short auto-memory notes discoverable by their actual content.
+      searchText: (content || "").slice(0, 8192),
       subType: fm.type || "memory", // feedback, user, project, reference
       size: s ? formatSize(s.size) : "0B",
       sizeBytes: s ? s.size : 0,

@@ -137,7 +137,7 @@ async function createTestEnv() {
 
   await writeFile(join(dirs.nestedMem, 'MEMORY.md'), '# Memory Index\n');
   await writeFile(join(dirs.nestedMem, 'sub_app_notes.md'),
-    `---\nname: sub_app_notes\ndescription: Sub-app development notes\ntype: project\n---\nSub-app specific development notes.`);
+    `---\nname: sub_app_notes\ndescription: Sub-app development notes\ntype: project\n---\nSub-app specific development notes. Use subprocess.run for process execution.`);
 
   await writeFile(join(dirs.deepMem, 'MEMORY.md'), '# Memory Index\n');
   await writeFile(join(dirs.deepMem, 'core_internals.md'),
@@ -415,6 +415,8 @@ test.describe('API Layer', () => {
     expect(mem.subType).toBe('user');
     expect(mem.description).toBe('User prefers TypeScript + ESM');
     expect(mem.path).toContain('.claude/memory/user_prefs.md');
+    expect(mem.searchText).toContain('User prefers TypeScript + ESM for all projects.');
+    expect(mem.searchText.length).toBeLessThanOrEqual(8192);
   });
 
   test('GET /api/destinations returns valid moves for memory', async () => {
@@ -1074,6 +1076,25 @@ test.describe('UI Rendering', () => {
     await expect(page.locator(`.s-scope-hdr[data-scope-id="${env.encodedProject}"]`)).toBeVisible();
     await expect(page.locator(`.s-scope-hdr[data-scope-id="${env.encodedNested}"]`)).toBeVisible();
     await expect(page.locator(`.s-scope-hdr[data-scope-id="${env.encodedDeep}"]`)).toBeVisible();
+  });
+
+  test('All Memories aggregates every memory and searches file bodies', async ({ page }) => {
+    await page.goto(env.baseURL);
+    await page.waitForSelector('#loading', { state: 'hidden' });
+
+    const aggregate = page.locator(`.s-scope-hdr[data-scope-id="virtual:all-memories"]`);
+    await expect(aggregate).toBeVisible();
+    await aggregate.locator('.s-nm').click();
+
+    await expect(page.locator('.item[data-category="memory"]')).toHaveCount(7);
+    await expect(page.locator('.item', { hasText: 'user_prefs' })).toContainText('Global');
+    await expect(page.locator('.item', { hasText: 'sub_app_notes' })).toContainText('sub-app');
+    await expect(page.locator('#ctxBudgetBtn')).toBeHidden();
+    await expect(page.locator('#inheritToggleBtn')).toBeHidden();
+
+    await page.fill('#searchInput', 'subprocess.run');
+    await expect(page.locator('.item[data-category="memory"]')).toHaveCount(1);
+    await expect(page.locator('.item', { hasText: 'sub_app_notes' })).toBeVisible();
   });
 
   test('item counts match actual items per scope', async ({ page }) => {
@@ -3768,7 +3789,8 @@ test.describe('Harness Doctor control plane', () => {
     await expect(page.locator('.doctor-score-value')).toContainText('Grade');
     await expect(page.locator('#doctorContextMap .doctor-map-node').first()).toBeVisible();
     await expect(page.locator('#doctorContextMap .doctor-map-node[data-relation="direct"]')).toHaveCount(1);
-    await expect(page.locator('#doctorMigrationTarget option')).toHaveCount(2);
+    await expect(page.locator('#doctorMigrationTarget option')).toHaveCount(3);
+    await expect(page.locator('#doctorMigrationTarget option[value="dsh"]')).toHaveCount(1);
     await expect(page.locator('#doctorMetricsEnabled')).not.toBeChecked();
     expect(errors).toEqual([]);
 

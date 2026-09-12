@@ -80,6 +80,7 @@
  * @property {string} name
  * @property {string} [fileName]
  * @property {string} [description]
+ * @property {string} [searchText] Local-only, capped text used for dashboard search.
  * @property {string} [subType]
  * @property {string} [size]
  * @property {number} [sizeBytes]

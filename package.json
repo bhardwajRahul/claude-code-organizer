@@ -1,7 +1,7 @@
 {
   "name": "@mcpware/cross-code-organizer",
   "version": "0.20.0",
-  "description": "Cross-Code Organizer (CCO, formerly Claude Code Organizer) — manage AI coding tool configs across Claude Code, Codex CLI, and more. Memories, skills, MCP servers, commands, agents, rules, and hooks across global and project scopes",
+  "description": "Cross-Code Organizer (CCO, formerly Claude Code Organizer) — manage AI coding tool configs across Claude Code, Codex CLI, OpenCode, DeepSeek Harness, and more. Memories, skills, MCP servers, commands, agents, rules, and hooks across global and project scopes",
   "type": "module",
   "files": [
     "bin/",
@@ -45,6 +45,8 @@
     "codex-cli",
     "openai-codex",
     "opencode",
+    "deepseek-harness",
+    "dsh",
     "multi-harness",
     "cross-harness",
     "ai-coding-harness",

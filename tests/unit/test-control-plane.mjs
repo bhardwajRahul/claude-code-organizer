@@ -11,6 +11,7 @@ import {
   applySkillMigration,
   findExactDuplicateRepairs,
   previewSkillMigration,
+  skillRootFor,
   undoControlPlaneTransaction,
 } from "../../src/control-plane-operations.mjs";
 import {
@@ -117,6 +118,14 @@ describe("control-plane context and hygiene", () => {
 });
 
 describe("reversible repair and skill migration", () => {
+  it("maps DeepSeek Harness skill migrations to its official roots", () => {
+    assert.equal(skillRootFor("dsh", "/home/user/.dsh"), "/home/user/.dsh/skills");
+    assert.equal(
+      skillRootFor("dsh", "/home/user/.dsh", { repoDir: "/repo/app" }),
+      "/repo/app/.dsh/skills",
+    );
+  });
+
   it("archives only verified identical duplicates and restores them", async () => {
     const root = await mkdtemp(join(tmpdir(), "cco-repair-"));
     try {

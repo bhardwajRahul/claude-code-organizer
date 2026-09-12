@@ -28,8 +28,9 @@
   - Claude Code — `src/harness/adapters/claude.mjs`
   - Codex CLI — `src/harness/adapters/codex.mjs`
   - OpenCode — `src/harness/adapters/opencode.mjs`
+  - DeepSeek Harness — `src/harness/adapters/dsh.mjs`
 - Search: `validateAdapter`, `registerAdapter`, `listAdapters`, `scanHarness`
-- Tests: `tests/unit/test-codex-adapter.mjs`, `tests/unit/test-opencode-adapter.mjs`
+- Tests: `tests/unit/test-codex-adapter.mjs`, `tests/unit/test-opencode-adapter.mjs`, `tests/unit/test-dsh-adapter.mjs`
 - Connects to:
   - Server — selects one adapter per request and exposes its capabilities
   - Scanner — adapter scanners return the shared inventory shape
@@ -170,6 +171,7 @@
 - `test-trim-images.mjs` — image block redaction in sessions
 - `test-codex-adapter.mjs` — Codex CLI inventory and scope behavior
 - `test-opencode-adapter.mjs` — OpenCode config, instruction, skill, MCP, and plugin discovery
+- `test-dsh-adapter.mjs` — DeepSeek Harness settings, profiles, official skill roots, and capability gates
 - `test-control-plane.mjs` — local privacy metrics and monthly signal behavior
 - `test-metrics-worker.mjs` — collector validation, strict schema, and D1 writes
 

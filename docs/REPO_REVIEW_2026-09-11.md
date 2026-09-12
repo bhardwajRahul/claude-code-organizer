@@ -17,7 +17,7 @@ Official harness UIs now expose more of their own skills and plugins, so a singl
 - Last source commit before this review: 2026-06-06 (3 months 5 days).
 - Latest npm release: 0.19.3 on 2026-04-28 (4 months 14 days).
 - Baseline tests before changes: 132 unit and 121 E2E.
-- Current tests after changes: 147 unit and 211 E2E, 358 total.
+- Current tests after changes: 160 unit and 212 E2E, 372 total.
 - Dependency audit before changes: 8 advisories (4 high, 3 moderate, 1 low).
 - Dependency audit after changes: 0 advisories.
 - Package dry run excludes local experimental `session-distiller-v2` through `v5` files.
@@ -25,6 +25,8 @@ Official harness UIs now expose more of their own skills and plugins, so a singl
 ## Changes made in this review
 
 - Added an inventory-first OpenCode adapter for global and project JSON/JSONC config, AGENTS instructions, agents, commands, compatible skill roots, MCP servers, npm/local plugins, tools, and themes.
+- Integrated the community DeepSeek Harness adapter after hardening its capability flags, path allowlists, environment overrides, project scope, and official top-level skill discovery rules.
+- Added a source-labelled All Memories scope and local Markdown body search across Claude projects.
 - Added complete Markdown editing in the detail panel for editable skills, memories, agents, commands, and instructions.
 - Added stale-write protection: per-file server queues and expected-content checks return HTTP 409 instead of overwriting a newer edit.
 - Bound the dashboard to `127.0.0.1`, rejected non-local host headers and cross-site mutations, limited request bodies to 1 MiB, and restricted file reads/writes to scanned items and adapter-approved roots.
@@ -45,14 +47,14 @@ Official harness UIs now expose more of their own skills and plugins, so a singl
 | #35 Copilot CLI skill parsing | Reproducible YAML parsing bug. | Fixed by quoting `argument-hint`. |
 | #33 Windows “Invalid or disallowed path” | The old guard both over-allowed HOME and under-allowed valid projects on another drive. | Replaced with adapter/discovered-scope allowlists and scanned-item checks. |
 | #32 CLI-Anything/Kreuzberg | Feature proposal, not a defect. | Keep as input to the portability/automation roadmap; do not add a dependency without a concrete workflow. |
-| #27 cross-project memory search | Strong fit with the product thesis. | Prioritize a unified content index after provenance/effective-context modeling. |
+| #27 cross-project memory search | Strong fit with the product thesis. | Implemented a source-labelled aggregate view and local body search in v0.20. |
 | #17 underscore path resolution | Already covered by current regression tests. | Close after the reviewed changes are shipped. |
 | #4 Empirica integration | Optional integration, not core. | Defer until the control-plane model is stable. |
 
 ## Pull-request triage
 
 - PR #34 contains the same one-line `argument-hint` quoting fix applied in this review.
-- PR #36 is promising DeepSeek Harness inventory work, but should not be merged unchanged. It declares session support without a session scanner, allows its entire HOME directory as a safe root, and leaves `.system` skills deletable. Ask for those corrections plus an upstream-format reference before merging.
+- PR #36 was integrated with follow-up hardening: unsupported sessions are capability-gated, HOME is no longer a safe root, DSH path overrides and project scope are honored, and skill discovery follows the upstream top-level-only format while excluding user DSH `.system` entries.
 
 ## Why the opportunity still exists
 

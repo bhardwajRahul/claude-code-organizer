@@ -179,10 +179,10 @@ function safeBundleName(item) {
 export function skillRootFor(adapterId, rootDir, targetScope = null) {
   if (targetScope?.repoDir) {
     if (adapterId === "claude") return join(targetScope.repoDir, ".claude", "skills");
-    if (adapterId === "codex") return join(targetScope.repoDir, ".codex", "skills");
+    if (adapterId === "codex" || adapterId === "dsh") return join(targetScope.repoDir, `.${adapterId}`, "skills");
     if (adapterId === "opencode") return join(targetScope.repoDir, ".opencode", "skill");
   }
-  if (adapterId === "claude" || adapterId === "codex") return join(rootDir, "skills");
+  if (adapterId === "claude" || adapterId === "codex" || adapterId === "dsh") return join(rootDir, "skills");
   if (adapterId === "opencode") return join(rootDir, "skill");
   throw new Error(`Skill migration is not supported for ${adapterId}`);
 }
