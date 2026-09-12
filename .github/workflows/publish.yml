@@ -9,8 +9,8 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write    # MCP Registry OIDC auth
-      contents: write    # Create GitHub Release
+      id-token: write # MCP Registry OIDC auth
+      contents: write # Create GitHub Release
 
     steps:
       - name: Checkout
@@ -64,11 +64,6 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         run: npm publish --access public
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          body_path: docs/releases/${{ github.ref_name }}.md
-
       - name: Install mcp-publisher
         env:
           MCP_PUBLISHER_VERSION: v1.8.1
@@ -81,9 +76,76 @@ jobs:
           echo "${MCP_PUBLISHER_SHA256}  ${mcp_archive}" | sha256sum --check --strict
           tar -xzf "$mcp_archive" mcp-publisher
 
+      - name: Validate MCP Registry metadata
+        run: ./mcp-publisher validate
+
+      - name: Check if MCP Registry version already published
+        id: check-mcp
+        run: |
+          server_name=$(node -p "require('./server.json').name")
+          server_version=$(node -p "require('./server.json').version")
+          encoded_name=$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$server_name")
+          registry_url="https://registry.modelcontextprotocol.io/v0.1/servers/${encoded_name}/versions/${server_version}"
+          status=$(curl --silent --output /dev/null --write-out "%{http_code}" "$registry_url")
+          case "$status" in
+            200) echo "skip=true" >> "$GITHUB_OUTPUT" ;;
+            404) echo "skip=false" >> "$GITHUB_OUTPUT" ;;
+            *) echo "MCP Registry lookup failed with HTTP ${status}" >&2; exit 1 ;;
+          esac
+
       - name: Authenticate to MCP Registry (OIDC)
+        if: steps.check-mcp.outputs.skip != 'true'
         run: ./mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry
-        run: ./mcp-publisher publish
-        continue-on-error: true
+        if: steps.check-mcp.outputs.skip != 'true'
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if ./mcp-publisher publish; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              exit 1
+            fi
+            echo "MCP Registry publish attempt ${attempt} failed; retrying in 15 seconds"
+            sleep 15
+          done
+
+      - name: Verify published registry artifacts
+        run: |
+          package_name=$(node -p "require('./package.json').name")
+          package_version=$(node -p "require('./package.json').version")
+          for attempt in 1 2 3 4 5; do
+            published_version=$(npm view "${package_name}@${package_version}" version 2>/dev/null || true)
+            if [ "$published_version" = "$package_version" ]; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "npm verification did not find ${package_name}@${package_version}" >&2
+              exit 1
+            fi
+            echo "npm verification attempt ${attempt} did not find the release; retrying in 5 seconds"
+            sleep 5
+          done
+
+          server_name=$(node -p "require('./server.json').name")
+          server_version=$(node -p "require('./server.json').version")
+          encoded_name=$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$server_name")
+          registry_url="https://registry.modelcontextprotocol.io/v0.1/servers/${encoded_name}/versions/${server_version}"
+          for attempt in 1 2 3 4 5; do
+            status=$(curl --silent --output /dev/null --write-out "%{http_code}" "$registry_url")
+            if [ "$status" = 200 ]; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "MCP Registry verification failed with HTTP ${status}" >&2
+              exit 1
+            fi
+            echo "MCP Registry verification attempt ${attempt} returned HTTP ${status}; retrying in 5 seconds"
+            sleep 5
+          done
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          body_path: docs/releases/${{ github.ref_name }}.md

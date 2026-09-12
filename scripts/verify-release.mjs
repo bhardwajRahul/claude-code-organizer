@@ -39,6 +39,9 @@ expectEqual("Claude plugin version", plugin.version, version);
 expectEqual("MCP server version", server.version, version);
 expectEqual("MCP npm identifier", npmServerPackage?.identifier, pkg.name);
 expectEqual("MCP npm package version", npmServerPackage?.version, version);
+if (Array.from(server.description || "").length > 100) {
+  errors.push("MCP server description exceeds the registry's 100-character limit");
+}
 expectEqual("npm executable", pkg.bin?.["cross-code-organizer"], "bin/cli.mjs");
 expectEqual("npm provenance", pkg.publishConfig?.provenance, true);
 if (releaseTag) expectEqual("release tag", releaseTag, expectedTag);
