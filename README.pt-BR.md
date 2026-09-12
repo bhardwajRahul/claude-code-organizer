@@ -8,7 +8,7 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-345%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-358%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
 [![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [廣東話](README.zh-HK.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Bahasa Indonesia](README.id.md) | [Italiano](README.it.md) | Português | [Türkçe](README.tr.md) | [Tiếng Việt](README.vi.md) | [ไทย](README.th.md)
@@ -27,7 +27,7 @@ O CCO dá visibilidade cross-harness. Claude Code tem memories, skills, agents, 
 
 ![Cross-Code Organizer (CCO) Demo](docs/demo.gif)
 
-<sub>345 testes (137 unit + 208 E2E) | Zero telemetry | Demo gravado por IA usando [Pagecast](https://github.com/mcpware/pagecast)</sub>
+<sub>358 testes (147 unit + 211 E2E) | Zero telemetry | Demo gravado por IA usando [Pagecast](https://github.com/mcpware/pagecast)</sub>
 
 > 100+ stars em 5 dias. Feito por alguém que largou a faculdade de CS, descobriu 140 arquivos de config invisíveis mandando em AI coding tools e decidiu que ninguém merece ficar dando `cat` em cada um. Primeiro projeto open source — valeu demais a todo mundo que deu star, testou e abriu issue.
 

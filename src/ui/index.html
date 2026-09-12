@@ -27,6 +27,11 @@
         <span class="sec-btn-label">Security Scan</span>
         <span class="sec-btn-badge hidden" id="securityScanBadge" aria-hidden="true"></span>
       </button>
+      <button class="sidebar-security-btn sidebar-doctor-btn" id="doctorBtn" type="button">
+        <span class="sec-btn-icon" aria-hidden="true">🧹</span>
+        <span class="sec-btn-label">Harness Doctor</span>
+        <span class="sec-btn-badge hidden" id="doctorBadge" aria-hidden="true"></span>
+      </button>
       <input class="sidebar-search" id="searchInput" type="text" placeholder="Search...">
 
       <div class="sidebar-tree" id="sidebarTree"></div>
@@ -229,6 +234,75 @@
   </div>
 
   <!-- Export modal removed — export goes directly to ~/.claude/exports/ -->
+
+  <div class="modal-bg hidden" id="doctorModal">
+    <div class="modal doctor-modal" role="dialog" aria-modal="true" aria-labelledby="doctorTitle">
+      <div class="doctor-hdr">
+        <div>
+          <span class="wn-label">Local control plane</span>
+          <h3 id="doctorTitle">Harness Doctor</h3>
+          <p class="modal-sub">See what actually loads, clean verified duplicates, and copy portable skills between harnesses.</p>
+        </div>
+        <button class="detail-x" id="doctorClose" type="button" aria-label="Close">✕</button>
+      </div>
+
+      <div class="doctor-body">
+        <section class="doctor-section doctor-overview" id="doctorOverview">
+          <div class="doctor-loading">Auditing the selected scope…</div>
+        </section>
+
+        <section class="doctor-section">
+          <div class="doctor-section-hdr">
+            <div>
+              <h4>Effective Context Map</h4>
+              <p>Declared sources and setting precedence for this scope.</p>
+            </div>
+          </div>
+          <div class="doctor-context-map" id="doctorContextMap"></div>
+        </section>
+
+        <section class="doctor-section">
+          <div class="doctor-section-hdr">
+            <div>
+              <h4>Findings & reversible repair</h4>
+              <p>Automatic repair is offered only for byte-identical duplicates in the same scope.</p>
+            </div>
+          </div>
+          <div class="doctor-findings" id="doctorFindings"></div>
+        </section>
+
+        <section class="doctor-section">
+          <div class="doctor-section-hdr">
+            <div>
+              <h4>Cross-harness migration</h4>
+              <p>Copy SKILL.md bundles without deleting the source. Existing targets are never overwritten by default.</p>
+            </div>
+          </div>
+          <div class="doctor-migration-controls">
+            <label for="doctorMigrationTarget">Target harness</label>
+            <select id="doctorMigrationTarget" class="bkp-select"></select>
+            <button class="d-btn d-btn-open" id="doctorMigrationPreview" type="button">Preview</button>
+          </div>
+          <div class="doctor-migration" id="doctorMigration"></div>
+        </section>
+
+        <section class="doctor-section doctor-privacy">
+          <div class="doctor-section-hdr">
+            <div>
+              <h4>Privacy-preserving metrics</h4>
+              <p>Off by default. Stores only daily aggregate event counts and coarse inventory buckets on this machine.</p>
+            </div>
+            <label class="bkp-toggle" for="doctorMetricsEnabled">
+              <input type="checkbox" id="doctorMetricsEnabled">
+              <span class="bkp-toggle-track"></span>
+              <span class="bkp-toggle-label" id="doctorMetricsLabel">Off</span>
+            </label>
+          </div>
+          <div class="doctor-privacy-detail" id="doctorPrivacyDetail"></div>
+        </section>
+      </div>
+    </div>
+  </div>
 
   <div class="modal-bg hidden" id="dragConfirmModal">
     <div class="modal">

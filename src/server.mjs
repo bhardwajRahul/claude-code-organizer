@@ -23,6 +23,21 @@ import { runSecurityScan, checkClaudeAvailable, llmJudge, detectMcpDuplicates } 
 import { computeClaudeContextBudget } from "./harness/adapters/claude-context-budget.mjs";
 import { getAdapter, getDefaultAdapterId, listAdapters } from "./harness/registry.mjs";
 import { scanHarness as runHarnessScan } from "./harness/scanner-framework.mjs";
+import { computeHygieneReport } from "./control-plane.mjs";
+import {
+  applyExactDuplicateRepair,
+  applySkillMigration,
+  findExactDuplicateRepairs,
+  previewSkillMigration,
+  skillRootFor,
+  undoControlPlaneTransaction,
+} from "./control-plane-operations.mjs";
+import {
+  getPrivacyMetricsStatus,
+  recordPrivacyMetric,
+  setPrivacyMetricsEnabled,
+} from "./privacy-metrics.mjs";
+import { isNewerVersion } from "./version.mjs";
 
 // ── Update check ─────────────────────────────────────────────────────
 async function checkForUpdate() {
@@ -38,7 +53,7 @@ async function checkForUpdate() {
     req.on("timeout", () => { req.destroy(); reject(new Error("timeout")); });
   });
   const { version: latest } = JSON.parse(data);
-  if (latest && latest !== local) {
+  if (latest && isNewerVersion(latest, local)) {
     console.log(`\uD83D\uDCE6 Update available: ${local} \u2192 ${latest}  Run: npm update -g @mcpware/cross-code-organizer\n`);
   }
 }
@@ -48,6 +63,7 @@ async function checkForUpdate() {
 const HOME = homedir();
 const CLAUDE_DIR = join(HOME, ".claude");
 const BACKUP_DIR = join(HOME, ".claude-backups");
+const CONTROL_DIR = join(HOME, ".cco");
 const BACKUP_EXCLUDED_CATEGORIES = new Set(["setting", "hook", "session", "history", "shell", "runtime"]);
 const MAX_REQUEST_BODY_BYTES = 1024 * 1024;
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
@@ -213,6 +229,22 @@ async function getHarnessPathInfo(harnessId = getDefaultAdapterId()) {
     securityDir: join(rootDir, ".cco-security"),
     safeRoots: paths.safeRoots || [rootDir],
   };
+}
+
+async function isKnownControlPlanePath(filePath) {
+  if (!filePath || !isAbsolute(filePath)) return false;
+  const roots = [];
+  for (const summary of await listAdapters()) {
+    const info = await getHarnessPathInfo(summary.id);
+    roots.push(info.rootDir, ...(info.safeRoots || []));
+  }
+  for (const cached of cachedDataByHarness.values()) {
+    for (const scope of cached?.scopes || []) {
+      if (scope.repoDir) roots.push(scope.repoDir);
+      if (scope.configDir) roots.push(scope.configDir);
+    }
+  }
+  return roots.filter(Boolean).some(root => isPathWithin(filePath, root));
 }
 
 function exportableBackupItems(items) {
@@ -405,7 +437,7 @@ async function handleRequest(req, res) {
         req.on("timeout", () => { req.destroy(); reject(new Error("timeout")); });
       });
       const { version: latest } = JSON.parse(data);
-      return json(res, { local, latest, updateAvailable: latest !== local });
+      return json(res, { local, latest, updateAvailable: isNewerVersion(latest, local) });
     } catch {
       return json(res, { local, latest: null, updateAvailable: false });
     }
@@ -450,6 +482,141 @@ async function handleRequest(req, res) {
       records,
       groups,
     });
+  }
+
+  // GET /api/control-plane?scope=<id> — effective context map + hygiene score
+  if (path === "/api/control-plane" && req.method === "GET") {
+    const scopeId = url.searchParams.get("scope");
+    if (!scopeId) return json(res, { ok: false, error: "Missing scope parameter" }, 400);
+    if (!cachedData) await freshScan();
+    if (!cachedData.scopes.some(scope => scope.id === scopeId)) {
+      return json(res, { ok: false, error: "Unknown scope" }, 400);
+    }
+    const repairs = await findExactDuplicateRepairs(cachedData.items, scopeId);
+    const report = computeHygieneReport(cachedData, scopeId, { exactDuplicateRepairs: repairs });
+    await recordPrivacyMetric(HOME, "doctor_open", activeAdapter.id, { inventoryCount: cachedData.items.length });
+    return json(res, { ok: true, harness: cachedData.harness, ...report });
+  }
+
+  // POST /api/control-plane/repair — archive one verified exact duplicate
+  if (path === "/api/control-plane/repair" && req.method === "POST") {
+    const { scopeId, actionId } = await readBody(req);
+    if (!scopeId || !actionId) return json(res, { ok: false, error: "Missing scopeId or actionId" }, 400);
+    if (!cachedData) await freshScan();
+    const repairs = await findExactDuplicateRepairs(cachedData.items, scopeId);
+    const candidate = repairs.find(repair => repair.id === actionId);
+    if (!candidate) return json(res, { ok: false, error: "Repair is stale or unavailable; scan again" }, 409);
+    try {
+      const result = await applyExactDuplicateRepair(
+        candidate,
+        CONTROL_DIR,
+        filePath => isPathAllowed(filePath, harnessId, cachedData, { knownOnly: true }),
+      );
+      await freshScan();
+      await recordPrivacyMetric(HOME, "repair_apply", activeAdapter.id, { inventoryCount: cachedData.items.length });
+      return json(res, result);
+    } catch (error) {
+      return json(res, { ok: false, error: error.message }, requestErrorStatus(error, 400));
+    }
+  }
+
+  // GET /api/migration/preview — copy-only SKILL.md migration to another harness
+  if (path === "/api/migration/preview" && req.method === "GET") {
+    const scopeId = url.searchParams.get("scope");
+    const targetHarnessId = url.searchParams.get("target");
+    const targetScopeId = url.searchParams.get("targetScope") || "global";
+    if (!scopeId || !targetHarnessId) return json(res, { ok: false, error: "Missing scope or target harness" }, 400);
+    if (targetHarnessId === harnessId) return json(res, { ok: false, error: "Choose a different target harness" }, 400);
+    if (!cachedData) await freshScan();
+    const targetAdapter = await getAdapter(targetHarnessId);
+    const targetData = await refreshScanCache(targetHarnessId);
+    const targetScope = targetData.scopes.find(scope => scope.id === targetScopeId);
+    if (!targetScope) return json(res, { ok: false, error: "Unknown target scope" }, 400);
+    const targetPaths = await getHarnessPathInfo(targetHarnessId);
+    const sourceItems = cachedData.items.filter(item => item.scopeId === scopeId && item.category === "skill");
+    const targetItems = targetData.items.filter(item => item.scopeId === targetScopeId);
+    const preview = await previewSkillMigration({
+      sourceItems,
+      targetItems,
+      targetAdapterId: targetAdapter.id,
+      targetRootDir: targetPaths.rootDir,
+      targetScope,
+    });
+    await recordPrivacyMetric(HOME, "migration_preview", activeAdapter.id, { inventoryCount: cachedData.items.length });
+    return json(res, {
+      ok: true,
+      sourceHarness: cachedData.harness,
+      targetHarness: targetData.harness,
+      ...preview,
+    });
+  }
+
+  // POST /api/migration/apply — copy selected skills with conflict protection
+  if (path === "/api/migration/apply" && req.method === "POST") {
+    const { scopeId, targetHarnessId, targetScopeId = "global", sourcePaths = [], overwrite = false } = await readBody(req);
+    if (!scopeId || !targetHarnessId || !Array.isArray(sourcePaths)) {
+      return json(res, { ok: false, error: "Missing migration fields" }, 400);
+    }
+    if (targetHarnessId === harnessId) return json(res, { ok: false, error: "Choose a different target harness" }, 400);
+    if (!cachedData) await freshScan();
+    const targetAdapter = await getAdapter(targetHarnessId);
+    const targetData = getCachedData(targetHarnessId) || await refreshScanCache(targetHarnessId);
+    const targetScope = targetData.scopes.find(scope => scope.id === targetScopeId);
+    if (!targetScope) return json(res, { ok: false, error: "Unknown target scope" }, 400);
+    const targetPaths = await getHarnessPathInfo(targetHarnessId);
+    const targetRoot = skillRootFor(targetAdapter.id, targetPaths.rootDir, targetScope);
+    const sourceItems = cachedData.items.filter(item => item.scopeId === scopeId && item.category === "skill");
+    const targetItems = targetData.items.filter(item => item.scopeId === targetScopeId);
+    const preview = await previewSkillMigration({
+      sourceItems,
+      targetItems,
+      targetAdapterId: targetAdapter.id,
+      targetRootDir: targetPaths.rootDir,
+      targetScope,
+    });
+    const knownSourcePaths = new Set(sourceItems.map(item => item.path));
+    if (sourcePaths.some(filePath => !knownSourcePaths.has(filePath))) {
+      return json(res, { ok: false, error: "Migration contains an unknown source" }, 400);
+    }
+    try {
+      const result = await applySkillMigration({
+        candidates: preview.candidates,
+        selectedSourcePaths: sourcePaths,
+        overwrite: Boolean(overwrite),
+        baseDir: CONTROL_DIR,
+        validateSource: filePath => isPathAllowed(filePath, harnessId, cachedData, { knownOnly: true }),
+        validateTarget: async filePath => isPathWithin(filePath, targetRoot),
+      });
+      if (result.migrated) await refreshScanCache(targetHarnessId);
+      await recordPrivacyMetric(HOME, "migration_apply", activeAdapter.id, { inventoryCount: cachedData.items.length });
+      return json(res, result);
+    } catch (error) {
+      return json(res, { ok: false, error: error.message }, requestErrorStatus(error, 400));
+    }
+  }
+
+  // POST /api/control-plane/undo — undo a repair or migration transaction
+  if (path === "/api/control-plane/undo" && req.method === "POST") {
+    const { transactionId, kind = "repair" } = await readBody(req);
+    try {
+      const result = await undoControlPlaneTransaction(transactionId, CONTROL_DIR, isKnownControlPlanePath);
+      invalidateCachedData(harnessId);
+      for (const summary of await listAdapters()) invalidateCachedData(summary.id);
+      await recordPrivacyMetric(HOME, kind === "migration" ? "migration_undo" : "repair_undo", activeAdapter.id);
+      return json(res, result);
+    } catch (error) {
+      return json(res, { ok: false, error: error.message }, requestErrorStatus(error, 400));
+    }
+  }
+
+  // GET/POST /api/privacy-metrics — explicit local-only metrics consent
+  if (path === "/api/privacy-metrics" && req.method === "GET") {
+    return json(res, { ok: true, ...(await getPrivacyMetricsStatus(HOME)) });
+  }
+  if (path === "/api/privacy-metrics" && req.method === "POST") {
+    const { enabled } = await readBody(req);
+    if (typeof enabled !== "boolean") return json(res, { ok: false, error: "enabled must be a boolean" }, 400);
+    return json(res, { ok: true, ...(await setPrivacyMetricsEnabled(HOME, enabled)) });
   }
 
   // GET /api/context-budget?scope=<id> — token budget breakdown for a scope

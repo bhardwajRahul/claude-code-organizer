@@ -80,6 +80,8 @@ let inlineEditorRequestId = 0;
 let mcpDisabledNames = new Set(); // disabled MCP server names for current scope
 let mcpDisabledScopeId = null;   // which scope the disabled list was loaded for
 let lastBackupFolder = "~/.claude-backups/latest";
+let doctorReport = null;
+let doctorMigrationPreview = null;
 
 const uiState = {
   expandedScopes: new Set(),
@@ -169,6 +171,17 @@ async function init() {
 // Add a new entry here for every release that has user-facing changes.
 // Key = version string (must match package.json exactly).
 const CHANGELOG = {
+  "0.20.0": {
+    title: "Harness Doctor + OpenCode",
+    tagline: "See what every coding harness loads, then clean it safely.",
+    changes: [
+      "Harness Doctor maps effective context, explains hygiene deductions, and estimates context size per scope.",
+      "Verified byte-identical duplicates can be archived with a fingerprinted backup and safe Undo.",
+      "Copy portable SKILL.md bundles between Claude Code, Codex CLI, and OpenCode with a conflict preview.",
+      "OpenCode inventory, in-dashboard Markdown editing, and a rebuilt resumable Session Distiller.",
+      "Optional local aggregate metrics are off by default and are never uploaded.",
+    ],
+  },
   "0.18.0": {
     title: "Backup Center",
     tagline: "Never lose your coding harness setup again.",
@@ -223,10 +236,11 @@ function checkWhatsNew(currentVersion) {
 
 async function checkForUpdate() {
   try {
-    const { local, updateAvailable } = await fetchJson("/api/version");
+    const { local, latest, updateAvailable } = await fetchJson("/api/version");
 
-    // Show What's New if this is a version the user hasn't seen yet
-    checkWhatsNew(local);
+    // Do not announce an unreleased local build as a published release.
+    // Once npm reports this exact version, show the changelog once.
+    if (latest === local) checkWhatsNew(local);
 
     if (!updateAvailable) return;
     const footer = document.querySelector(".sidebar-footer");
@@ -304,6 +318,7 @@ async function switchHarness(harnessId) {
   closeDetail();
   closeContextBudget();
   closeMcpControlsPanel();
+  closeHarnessDoctor();
   document.getElementById("securityPanel")?.classList.add("hidden");
   document.getElementById("inheritToggleBtn")?.classList.remove("active");
 
@@ -378,6 +393,7 @@ function setupUi() {
   setupResizers();
   setupSecurityScan();
   setupMcpControls();
+  setupHarnessDoctor();
 }
 
 function setupHarnessSelector() {
@@ -4677,6 +4693,276 @@ async function checkForNewMcpServers() {
       );
     }
   } catch {}
+}
+
+// ── Harness Doctor / local control plane ─────────────────────────────
+
+function doctorFormatBytes(bytes) {
+  const value = Number(bytes || 0);
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KiB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function closeHarnessDoctor() {
+  document.getElementById("doctorModal")?.classList.add("hidden");
+}
+
+async function refreshDoctorInventory() {
+  const previousScope = selectedScopeId;
+  data = await fetchJson(apiUrl("/api/scan"));
+  selectedScopeId = data.scopes.some(scope => scope.id === previousScope)
+    ? previousScope
+    : getInitialSelectedScopeId();
+  renderAll();
+}
+
+function renderDoctorOverview(report) {
+  const el = document.getElementById("doctorOverview");
+  const summary = report.contextMap.summary;
+  el.innerHTML = `
+    <div class="doctor-score-row">
+      <div class="doctor-score" style="--score:${report.score}">
+        <div class="doctor-score-value">${report.score}<small>Grade ${esc(report.grade)}</small></div>
+      </div>
+      <div class="doctor-summary-grid">
+        <div class="doctor-stat"><b>${report.auditedItemCount}</b><span>audited items</span></div>
+        <div class="doctor-stat"><b>${summary.sourceCount}</b><span>context sources</span></div>
+        <div class="doctor-stat"><b>${summary.estimatedContextTokens.toLocaleString()}</b><span>estimated tokens</span></div>
+        <div class="doctor-stat"><b>${report.repairableCount}</b><span>safe repairs</span></div>
+      </div>
+    </div>`;
+
+  const badge = document.getElementById("doctorBadge");
+  if (badge) {
+    badge.textContent = report.score;
+    badge.classList.remove("hidden");
+    badge.title = `Hygiene score ${report.score}/100`;
+  }
+}
+
+function renderDoctorContextMap(contextMap) {
+  const el = document.getElementById("doctorContextMap");
+  const nodes = contextMap.nodes.map(node => {
+    const categories = Object.entries(node.categories)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => `${esc(name)} ${count}`)
+      .join(" · ");
+    return `
+      <div class="doctor-map-node" data-relation="${esc(node.relation)}">
+        <div class="doctor-map-node-head"><span>${esc(node.label)}</span><span>${node.itemCount}</span></div>
+        <div class="doctor-map-rel">${esc(node.relation)}</div>
+        <div class="doctor-map-cats">${categories || "No items"}<br>${doctorFormatBytes(node.sizeBytes)}</div>
+      </div>`;
+  }).join("");
+  const modeNote = contextMap.mode === "effective"
+    ? "Only inheritance declared by this harness adapter is shown as effective."
+    : "This adapter has no declared runtime precedence model, so this is an inventory map only.";
+  const resolutions = contextMap.settings.resolutions || [];
+  const settings = resolutions.length ? `
+    <details class="doctor-setting-winners">
+      <summary>${resolutions.length} resolved settings · ${contextMap.settings.overriddenCount} overridden values</summary>
+      ${resolutions.map(entry => `
+        <div class="doctor-setting-row">
+          <span>${esc(entry.name)}</span>
+          <span>${esc(entry.winner.sourceFile || entry.winner.scopeId)}</span>
+          <span>${esc(entry.winner.sourceTier || "source")}${entry.overridden.length ? ` · overrides ${entry.overridden.length}` : ""}</span>
+        </div>`).join("")}
+    </details>` : "";
+  el.innerHTML = `
+    <div class="doctor-map-grid">${nodes || `<div class="doctor-empty">No declared context sources.</div>`}</div>
+    <div class="doctor-map-note">${esc(modeNote)} Context size is a byte-based estimate, not a runtime trace.</div>
+    ${settings}`;
+}
+
+function renderDoctorFindings(report) {
+  const el = document.getElementById("doctorFindings");
+  if (!report.findings.length) {
+    el.innerHTML = `<div class="doctor-empty">No hygiene findings for this scope.</div>`;
+    return;
+  }
+  el.innerHTML = report.findings.map(finding => `
+    <div class="doctor-finding">
+      <div class="doctor-finding-head">
+        <span class="doctor-severity" data-severity="${esc(finding.severity)}"></span>
+        <b>${esc(finding.title)}</b>
+        <span class="doctor-finding-count">${finding.count} · −${finding.deduction}</span>
+      </div>
+      <p>${esc(finding.detail)}</p>
+      ${(finding.repairs || []).map(repair => `
+        <div class="doctor-repair">
+          <code title="${esc(repair.preview)}">${esc(repair.path)}</code>
+          <button class="d-btn d-btn-open doctor-repair-btn" type="button" data-action-id="${esc(repair.id)}">Preview & archive</button>
+        </div>`).join("")}
+    </div>`).join("");
+}
+
+function renderDoctorPrivacy(status) {
+  const checkbox = document.getElementById("doctorMetricsEnabled");
+  const label = document.getElementById("doctorMetricsLabel");
+  const detail = document.getElementById("doctorPrivacyDetail");
+  checkbox.checked = Boolean(status.enabled);
+  label.textContent = status.enabled ? "Local metrics on" : "Off";
+  detail.textContent = status.enabled
+    ? `${status.storedDays} day(s) stored locally. Nothing is uploaded. Never collected: ${(status.neverCollected || []).join(", ")}.`
+    : "No metrics are collected. Enabling this creates a local-only aggregate file under ~/.cco/.";
+}
+
+async function loadHarnessDoctor() {
+  doctorReport = null;
+  doctorMigrationPreview = null;
+  document.getElementById("doctorOverview").innerHTML = `<div class="doctor-loading">Auditing the selected scope…</div>`;
+  document.getElementById("doctorContextMap").innerHTML = "";
+  document.getElementById("doctorFindings").innerHTML = "";
+  document.getElementById("doctorMigration").innerHTML = "";
+
+  const targetSelect = document.getElementById("doctorMigrationTarget");
+  const targets = availableHarnesses.filter(harness => harness.id !== selectedHarnessId);
+  targetSelect.innerHTML = targets.map(harness => `<option value="${esc(harness.id)}">${esc(`${harness.icon || ""} ${harness.displayName}`.trim())}</option>`).join("");
+  document.getElementById("doctorMigrationPreview").disabled = targets.length === 0;
+
+  try {
+    const [report, metrics] = await Promise.all([
+      fetchJson(apiUrl("/api/control-plane", { scope: selectedScopeId })),
+      fetchJson(apiUrl("/api/privacy-metrics")),
+    ]);
+    if (!report.ok) throw new Error(report.error || "Audit failed");
+    doctorReport = report;
+    renderDoctorOverview(report);
+    renderDoctorContextMap(report.contextMap);
+    renderDoctorFindings(report);
+    if (metrics.ok) renderDoctorPrivacy(metrics);
+  } catch (error) {
+    document.getElementById("doctorOverview").innerHTML = `<div class="doctor-empty">${esc(error.message || "Audit failed")}</div>`;
+  }
+}
+
+async function applyDoctorRepair(actionId) {
+  const repair = doctorReport?.findings.flatMap(finding => finding.repairs || []).find(entry => entry.id === actionId);
+  if (!repair) return;
+  if (!confirm(`${repair.preview}\n\nThe archived copy can be restored with Undo.`)) return;
+  const result = await fetchJson(apiUrl("/api/control-plane/repair"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scopeId: selectedScopeId, actionId }),
+  });
+  if (!result.ok) return toast(result.error || "Repair failed", true);
+  await refreshDoctorInventory();
+  await loadHarnessDoctor();
+  toast(result.message, false, async () => {
+    const undo = await fetchJson(apiUrl("/api/control-plane/undo"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transactionId: result.transactionId, kind: "repair" }),
+    });
+    if (!undo.ok) return toast(undo.error || "Undo failed", true);
+    await refreshDoctorInventory();
+    await loadHarnessDoctor();
+    toast("Repair undone");
+  });
+}
+
+function renderMigrationPreview(preview) {
+  const el = document.getElementById("doctorMigration");
+  if (!preview.candidates.length) {
+    el.innerHTML = `<div class="doctor-empty">No skills in this scope.</div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="doctor-migration-list">
+      ${preview.candidates.map(candidate => `
+        <label class="doctor-migration-row">
+          <input type="checkbox" class="doctor-migration-check" value="${esc(candidate.sourcePath)}"${candidate.status === "ready" ? " checked" : " disabled"}>
+          <span title="${esc(candidate.targetPath)}">${esc(candidate.name)}</span>
+          <span class="doctor-migration-status">${esc(candidate.status)}</span>
+        </label>`).join("")}
+    </div>
+    <div class="doctor-migration-actions">
+      <span class="doctor-map-note">${preview.summary.ready} ready · ${preview.summary.conflicts} conflicts · ${preview.summary.identical} identical</span>
+      <button class="d-btn d-btn-move" id="doctorMigrationApply" type="button">Copy selected skills</button>
+    </div>`;
+  document.getElementById("doctorMigrationApply").addEventListener("click", applyDoctorMigration);
+}
+
+async function previewDoctorMigration() {
+  const target = document.getElementById("doctorMigrationTarget").value;
+  const el = document.getElementById("doctorMigration");
+  if (!target) return;
+  el.innerHTML = `<div class="doctor-loading">Comparing skill bundles…</div>`;
+  try {
+    const preview = await fetchJson(apiUrl("/api/migration/preview", { scope: selectedScopeId, target, targetScope: "global" }));
+    if (!preview.ok) throw new Error(preview.error || "Preview failed");
+    doctorMigrationPreview = preview;
+    renderMigrationPreview(preview);
+  } catch (error) {
+    el.innerHTML = `<div class="doctor-empty">${esc(error.message || "Preview failed")}</div>`;
+  }
+}
+
+async function applyDoctorMigration() {
+  if (!doctorMigrationPreview) return;
+  const sourcePaths = [...document.querySelectorAll(".doctor-migration-check:checked")].map(input => input.value);
+  if (!sourcePaths.length) return toast("Select at least one ready skill", true);
+  const result = await fetchJson(apiUrl("/api/migration/apply"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      scopeId: selectedScopeId,
+      targetHarnessId: doctorMigrationPreview.targetHarness.id,
+      targetScopeId: "global",
+      sourcePaths,
+      overwrite: false,
+    }),
+  });
+  if (!result.ok) return toast(result.error || "Migration failed", true);
+  await previewDoctorMigration();
+  const message = `Copied ${result.migrated} skill${result.migrated === 1 ? "" : "s"}`;
+  const undoFn = result.undoAvailable ? async () => {
+    const undo = await fetchJson(apiUrl("/api/control-plane/undo"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transactionId: result.transactionId, kind: "migration" }),
+    });
+    if (!undo.ok) return toast(undo.error || "Undo failed", true);
+    await previewDoctorMigration();
+    toast("Migration undone");
+  } : null;
+  toast(message, false, undoFn);
+}
+
+function setupHarnessDoctor() {
+  const modal = document.getElementById("doctorModal");
+  document.getElementById("doctorBtn")?.addEventListener("click", () => {
+    modal.classList.remove("hidden");
+    loadHarnessDoctor();
+  });
+  document.getElementById("doctorClose")?.addEventListener("click", closeHarnessDoctor);
+  modal?.addEventListener("click", event => { if (event.target === modal) closeHarnessDoctor(); });
+  document.getElementById("doctorFindings")?.addEventListener("click", event => {
+    const button = event.target.closest(".doctor-repair-btn");
+    if (button) applyDoctorRepair(button.dataset.actionId);
+  });
+  document.getElementById("doctorMigrationPreview")?.addEventListener("click", previewDoctorMigration);
+  document.getElementById("doctorMetricsEnabled")?.addEventListener("change", async event => {
+    event.target.disabled = true;
+    try {
+      const status = await fetchJson(apiUrl("/api/privacy-metrics"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: event.target.checked }),
+      });
+      if (!status.ok) throw new Error(status.error || "Could not update metrics preference");
+      renderDoctorPrivacy(status);
+    } catch (error) {
+      event.target.checked = !event.target.checked;
+      toast(error.message || "Could not update metrics preference", true);
+    } finally {
+      event.target.disabled = false;
+    }
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && !modal?.classList.contains("hidden")) closeHarnessDoctor();
+  });
 }
 
 init();

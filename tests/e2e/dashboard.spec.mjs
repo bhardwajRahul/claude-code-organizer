@@ -3741,3 +3741,62 @@ test.describe('ccsrc Security Features', () => {
     expect(data.enterpriseMcp.active).toBe(false);
   });
 });
+
+test.describe('Harness Doctor control plane', () => {
+  let env;
+  test.beforeEach(async () => { env = await createTestEnv(); });
+  test.afterEach(async () => { await env.cleanup(); });
+
+  test('control-plane API returns an explainable score and context map', async () => {
+    const response = await fetch(`${env.baseURL}/api/control-plane?scope=global&harness=claude`);
+    expect(response.status).toBe(200);
+    const report = await response.json();
+    expect(report.ok).toBe(true);
+    expect(report.score).toBeGreaterThanOrEqual(0);
+    expect(report.score).toBeLessThanOrEqual(100);
+    expect(report.methodology.version).toBe(1);
+    expect(report.contextMap.scope.id).toBe('global');
+    expect(report.contextMap.nodes.some(node => node.relation === 'direct')).toBe(true);
+  });
+
+  test('Harness Doctor modal renders score, context, migration, and privacy controls', async ({ page }) => {
+    const errors = [];
+    page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+    await page.goto(env.baseURL);
+    await page.locator('#doctorBtn').click();
+    await expect(page.locator('#doctorModal')).not.toHaveClass(/hidden/);
+    await expect(page.locator('.doctor-score-value')).toContainText('Grade');
+    await expect(page.locator('#doctorContextMap .doctor-map-node').first()).toBeVisible();
+    await expect(page.locator('#doctorContextMap .doctor-map-node[data-relation="direct"]')).toHaveCount(1);
+    await expect(page.locator('#doctorMigrationTarget option')).toHaveCount(2);
+    await expect(page.locator('#doctorMetricsEnabled')).not.toBeChecked();
+    expect(errors).toEqual([]);
+  });
+
+  test('copy-only skill migration previews, applies, and undoes', async () => {
+    const previewResponse = await fetch(`${env.baseURL}/api/migration/preview?scope=global&target=codex&targetScope=global&harness=claude`);
+    const preview = await previewResponse.json();
+    expect(preview.ok).toBe(true);
+    expect(preview.summary.ready).toBeGreaterThanOrEqual(2);
+    const sourcePaths = preview.candidates.filter(item => item.status === 'ready').map(item => item.sourcePath);
+
+    const applyResponse = await fetch(`${env.baseURL}/api/migration/apply?harness=claude`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scopeId: 'global', targetHarnessId: 'codex', sourcePaths }),
+    });
+    const applied = await applyResponse.json();
+    expect(applied.ok).toBe(true);
+    expect(applied.migrated).toBe(preview.summary.ready);
+    expect(await fileExists(join(env.tmpDir, '.codex', 'skills', 'deploy', 'SKILL.md'))).toBe(true);
+
+    const undoResponse = await fetch(`${env.baseURL}/api/control-plane/undo?harness=claude`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transactionId: applied.transactionId, kind: 'migration' }),
+    });
+    const undone = await undoResponse.json();
+    expect(undone.ok).toBe(true);
+    expect(await fileExists(join(env.tmpDir, '.codex', 'skills', 'deploy'))).toBe(false);
+  });
+});

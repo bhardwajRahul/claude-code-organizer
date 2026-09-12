@@ -10,8 +10,8 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-345%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
-[![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-358%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Zero Outbound Telemetry](https://img.shields.io/badge/outbound%20telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [![Activation Scanner](https://img.shields.io/badge/Activation-Scanner%20Preview-purple)](research/README.md)
 [![Awesome MCP](https://img.shields.io/badge/Awesome-MCP%20Servers-fc60a8?logo=awesomelists&logoColor=white)](https://github.com/punkpeye/awesome-mcp-servers)
@@ -28,15 +28,15 @@ CCO gives you cross-harness visibility. Claude Code has memories, skills, agents
 
 > **v0.19.3** — Claude Code previews now survive markdown renderer failures, plugin-provided skills are scanned, and project discovery handles non-ASCII paths, lossy encoded paths, and symlinked directories.
 
-> **v0.20.0** — Adds OpenCode inventory, full Markdown editing for editable skills/memories/instructions, a resumable Session Distiller repair, local-server hardening, modern MCP tool annotations, and dependency security updates.
+> **v0.20.0** — Adds Harness Doctor with an Effective Context Map, explainable hygiene score, reversible exact-duplicate repair, copy-only skill migration, and optional local-only metrics. Also adds OpenCode inventory, full Markdown editing, a resumable Session Distiller repair, local-server hardening, and dependency security updates.
 
 > Scan for poisoned MCP servers. Reclaim wasted context tokens. Disable MCP servers per-project. Find and delete duplicate memories. Move misplaced configs where they belong.
 
-> **Privacy:** CCO reads selected harness config files on your machine (`~/.claude/`, `~/.codex/`, and project-level config). It does not send usage telemetry. It does check the npm registry for version updates unless network access is blocked.
+> **Privacy:** CCO reads selected harness config files on your machine (`~/.claude/`, `~/.codex/`, and project-level config). Optional usage metrics are disabled by default, aggregated locally under `~/.cco/`, and never uploaded. CCO checks the npm registry for version updates unless network access is blocked.
 
 ![Cross-Code Organizer (CCO) Demo](docs/demo.gif)
 
-<sub>345 tests (137 unit + 208 E2E) | Zero telemetry | Demo recorded by AI using [Pagecast](https://github.com/mcpware/pagecast)</sub>
+<sub>358 tests (147 unit + 211 E2E) | Zero outbound telemetry | Demo recorded by AI using [Pagecast](https://github.com/mcpware/pagecast)</sub>
 
 > 100+ stars in 5 days. Built by a CS dropout who found 140 invisible config files controlling AI coding tools and decided no one should have to `cat` each one. First open source project — thank you to everyone who starred, tested, and reported issues.
 
@@ -79,6 +79,8 @@ Or run directly: `npx @mcpware/cross-code-organizer`
 | | **CCO** | Standalone scanners | Desktop apps | VS Code extensions |
 |---|:---:|:---:|:---:|:---:|
 | Show Effective (per-category rules) | **Yes** | No | No | No |
+| Effective Context Map + hygiene score | **Yes** | No | No | No |
+| Reversible cross-harness skill copying | **Yes** | No | No | No |
 | Move items where they belong | **Yes** | No | No | No |
 | Security scan → click finding → navigate → delete | **Yes** | Scan only | No | No |
 | Activation-probe scanner research preview | **Yes** | No | No | No |
@@ -101,6 +103,16 @@ CCO started as Claude Code Organizer. It is now Cross-Code Organizer: a harness-
 Use the **Harness** selector in the sidebar to switch between Claude Code, Codex CLI, and OpenCode. Each harness keeps its own rules, paths, categories, and capabilities. OpenCode support is deliberately inventory-first: Markdown sources can be edited in place, while move/delete operations remain disabled until their merge and precedence semantics are modeled safely.
 
 The goal is not another single-tool settings viewer. CCO is a cross-harness inventory, cleanup, token-hygiene, and safety layer. Cursor, Windsurf, and Aider support remain planned.
+
+## Harness Doctor: Explain and Clean the Whole Setup
+
+Open **Harness Doctor** from the sidebar for a scope-level audit:
+
+- **Effective Context Map** — shows direct, ancestor, and global sources only when the selected harness adapter declares those inheritance rules. Adapters without a verified precedence model are labelled inventory-only.
+- **Explainable hygiene score** — every deduction is tied to a visible finding such as duplicate identities, missing discovery metadata, large context-bearing files, stale sessions, or setting overrides. It is a diagnostic heuristic, not a security certification.
+- **Safe auto-repair** — only byte-identical artifacts with the same name, category, and scope are eligible. CCO archives the extra copy, fingerprints it, and provides Undo.
+- **Cross-harness migration** — v1 copies portable `SKILL.md` bundles between Claude Code, Codex CLI, and OpenCode. It previews ready, conflicting, identical, and unsupported items and never overwrites by default.
+- **Private product signals** — optional metrics are off by default and remain local. They store only daily event counts, harness IDs, and coarse inventory buckets—never paths, names, prompts, file contents, or credentials. No upload endpoint exists.
 
 ## Context Budget: See How Many Tokens Claude Code Pre-Loads
 
@@ -354,7 +366,7 @@ CCO scans the selected harness and discovers projects automatically. The scope l
 
 ### Does CCO send my data anywhere?
 
-No. CCO reads config files on your local machine only. Zero telemetry, zero network calls (except connecting to your own locally-configured MCP servers during security scans and checking npm for version updates). Fully local dashboard.
+No config, prompt, session, path, or usage record is uploaded. Optional privacy metrics are disabled by default and, if enabled, stay as daily aggregates in `~/.cco/privacy-metrics.json`; there is no upload endpoint. Network access is limited to connecting to your locally configured MCP servers during security scans and checking npm for version updates.
 
 ### How is CCO different from standalone MCP scanners?
 
@@ -387,10 +399,12 @@ MIT
 
 ### 2026-09-11
 - v0.20.0: Added inventory-first OpenCode support and expanded Codex inventory
+- Added Harness Doctor: Effective Context Map, explainable hygiene scoring, reversible exact-duplicate repair, and copy-only cross-harness skill migration
+- Added disabled-by-default local aggregate metrics with a fixed allowlist and no upload path
 - Added full in-dashboard Markdown editing with conflict-safe serialized frontmatter saves
 - Rebuilt Session Distiller with exact backups, fresh UUIDs, a valid resume chain, and harness gating
 - Hardened the local server, modernized MCP tool annotations, and updated dependencies
-- Added regression coverage; 345 tests pass (137 unit + 208 E2E)
+- Added regression coverage; 358 tests pass (147 unit + 211 E2E)
 
 ### 2026-04-28
 - v0.19.3: Fixed Claude Code preview loading for markdown-backed skills, memories, and agents when the markdown renderer fails

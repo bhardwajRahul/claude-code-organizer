@@ -8,7 +8,7 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-345%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-358%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
 [![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | 廣東話 | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Bahasa Indonesia](README.id.md) | [Italiano](README.it.md) | [Português](README.pt-BR.md) | [Türkçe](README.tr.md) | [Tiếng Việt](README.vi.md) | [ไทย](README.th.md)
@@ -27,7 +27,7 @@ CCO 畀你 cross-harness visibility：Claude Code harness 有 memories、skills�
 
 ![Cross-Code Organizer (CCO) Demo](docs/demo.gif)
 
-<sub>345 個 test（137 unit + 208 E2E）| 零 telemetry | Demo 由 AI 用 [Pagecast](https://github.com/mcpware/pagecast) 錄製</sub>
+<sub>358 個 test（147 unit + 211 E2E）| 零 telemetry | Demo 由 AI 用 [Pagecast](https://github.com/mcpware/pagecast) 錄製</sub>
 
 > 5 日過 100 粒星。事緣一個 CS dropout 發現有 140 個隱形 config 檔案喺度控制 Claude，心諗唔通要逐個 `cat`？於是就整咗呢件嘢。第一個 open source project — 多謝每一個俾星、幫手測試、報 bug 嘅朋友。
 

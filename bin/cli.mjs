@@ -11,6 +11,7 @@
 import { access, constants, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { isNewerVersion } from '../src/version.mjs';
 
 const args = process.argv.slice(2);
 const isMcpMode = args.includes('--mcp');
@@ -80,7 +81,7 @@ async function checkForUpdate() {
     const data = await resp.json();
     const latestVersion = data.version;
 
-    if (localVersion !== latestVersion) {
+    if (isNewerVersion(latestVersion, localVersion)) {
       return { local: localVersion, latest: latestVersion };
     }
   } catch { /* silent — don't block startup */ }

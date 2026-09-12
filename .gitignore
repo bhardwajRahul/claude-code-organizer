@@ -35,6 +35,7 @@ tests/*
 tests/unit/*
 !tests/unit/test-opencode-adapter.mjs
 !tests/unit/test-session-distiller.mjs
+!tests/unit/test-control-plane.mjs
 test-results/
 
 # Cloned reference datasets (too large to push, download separately)
