@@ -10,7 +10,7 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-394%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-395%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
 [![Telemetry: Explicit Opt-in](https://img.shields.io/badge/telemetry-explicit%20opt--in-blue)](PRIVACY.md)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [![Activation Scanner](https://img.shields.io/badge/Activation-Scanner%20Preview-purple)](research/README.md)
@@ -22,7 +22,7 @@ English | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [�
 
 **Cross-Code Organizer (CCO)** is a cross-harness config organizer for AI coding tools. One dashboard for Claude Code, Codex CLI, OpenCode, DeepSeek Harness (DSH), and future adapters. Switch harnesses from the sidebar, inspect what each tool loads, edit Markdown customizations in place, and clean up your AI coding environment without spelunking through hidden folders.
 
-CCO gives you cross-harness visibility. Claude Code has memories, skills, agents, hooks, slash commands, MCP servers, sessions, and context budget tracking. Codex CLI has AGENTS instructions, profiles, sessions, history, shell snapshots, TOML config, MCP servers, plugins, hooks, and skills. OpenCode has layered JSON/JSONC config, AGENTS instructions, agents, commands, compatibility skill roots, MCP servers, plugins, tools, and themes. DSH has profiles, layered entry files, global settings, and project/user skill roots. CCO normalizes each harness through its own adapter, without pretending that every harness has the same precedence or mutation rules.
+CCO gives you cross-harness visibility. Claude Code has memories, skills, agents, hooks, slash commands, MCP servers, sessions, and context budget tracking. Codex CLI has AGENTS instructions, custom agents, profiles, sessions, history, shell snapshots, local memory artifacts, TOML config, MCP servers, plugins, hooks, and skills. OpenCode has layered JSON/JSONC config, AGENTS instructions, agents, commands, compatibility skill roots, MCP servers, plugins, tools, and themes. DSH has profiles, layered entry files, global settings, and project/user skill roots. CCO normalizes each harness through its own adapter, without pretending that every harness has the same precedence or mutation rules.
 
 **Rename note for search:** Cross-Code Organizer is the current name of the project formerly known as **Claude Code Organizer** (`claude-code-organizer`). If you are looking for a Claude Code memory manager, Claude Code MCP security scanner, Codex CLI config viewer, Cross Code Organizer, or `cross-code-organizer`, you are in the right place.
 
@@ -54,7 +54,7 @@ Other tools solve these one at a time. **CCO solves them in one loop:**
 
 **Scan** → See Claude Code memories, skills, agents, hooks, commands, plans, rules, sessions, and MCP servers. See Codex CLI AGENTS files, profiles, sessions, history, shell snapshots, config, skills, and MCP servers. One view.
 
-**Find** → Show Effective reveals what Claude Code actually loads per project. Codex scope views show which instructions and configs are in play. Context Budget shows what's eating Claude tokens. Security Scanner shows what's poisoning your MCP tools.
+**Find** → Show Effective reveals what Claude Code actually loads per project. Codex scope views show instructions, custom agents, nested memory artifacts, hook sources, and explicit skill enablement overrides. Context Budget shows what's eating Claude tokens. Security Scanner shows what's poisoning your MCP tools.
 
 **Fix** → Edit Markdown skills, memories, agents, commands, and instructions directly in the detail panel. Move supported items where they belong, delete duplicates, or click a security finding and land on the relevant MCP server entry.
 
@@ -142,7 +142,7 @@ For Claude Code, each category has its own behavior:
 
 Click **✦ Show Effective** to see what actually applies in any project. Shadowed items, name conflicts, and ancestor-loaded configs are all surfaced with badges and explanations. Hover any category pill for its specific rule. Items are tagged: `GLOBAL`, `ANCESTOR`, `SHADOWED`, `⚠ CONFLICT`.
 
-For Codex CLI, CCO honors `$CODEX_HOME` (default `~/.codex`) and scans trusted project `.codex` config, AGENTS files, legacy and standalone profiles, sessions, history, runtime metadata, shell snapshots, personal/project/plugin-provided skills, `hooks.json` plus hook scripts, and MCP server config so you can inspect the Codex side without leaving the same dashboard. Managed plugin skills and hook configuration are visible but read-only.
+For Codex CLI, CCO honors `$CODEX_HOME` (default `~/.codex`) and scans trusted project `.codex` config, AGENTS files, custom-agent TOML files, legacy and standalone profiles, sessions, history, runtime metadata, shell snapshots, nested local-memory artifacts, personal/project/plugin-provided skills, explicit `skills.config` states, `hooks.json`, inline TOML hooks, plugin hook config, hook scripts, and MCP server config. Managed plugin skills and hook configuration are visible but read-only.
 
 ![Duplicate MCP Servers](docs/reloaded%20mcp%20form%20diff%20scope.png)
 
@@ -283,8 +283,9 @@ Every constant, merge rule, and policy check cites the specific source file it w
 | Claude config (`CLAUDE.md`, settings files) | Yes | Locked | — | Global + Project |
 | Claude plugins | Yes | Locked | — | Global only |
 | Codex AGENTS instructions and project config | Yes | Locked | — | Global + Project |
+| Codex custom agents and local memory artifacts | Yes | — | Yes | Global + Project |
 | Codex profiles, sessions, history, runtime files, and shell snapshots | Yes | — | Mixed | Global + Project |
-| Codex skills and MCP servers | Yes | Mixed | Mixed | Global + Project |
+| Codex skills, enablement overrides, hooks, and MCP servers | Yes | Mixed | Mixed | Global + Project |
 
 ## How It Works
 
@@ -314,7 +315,7 @@ Automatic Backup Center scheduling currently uses `systemd` on Linux/WSL and `la
 | **Source-Verified Budget** | ✅ Done | Context budget constants matched to leaked Claude Code source |
 | **Session Distiller** | ✅ Done | Create a smaller resumable Claude session with verbatim conversation text, a full backup, index, and bundle UI |
 | **Image Trimmer** | ✅ Done | Remove base64 images from sessions. Invokable as `/trim-images` skill |
-| **Codex CLI Harness** | ✅ Done | Sidebar harness selector, `~/.codex` scanner, Codex skills/config/profiles/sessions/history/hooks/runtime support |
+| **Codex CLI Harness** | ✅ Done | `~/.codex` + trusted-project inventory for agents, nested memories, skills and enablement, config, profiles, sessions, history, hooks, plugins, MCP, and runtime |
 | **OpenCode Harness** | ✅ Inventory | Global/project JSONC config, AGENTS, agents, commands, compatible skills, MCP, plugins, tools, and themes |
 | **DeepSeek Harness** | ✅ Inventory | `$DSH_HOME` settings/profiles plus official global and project skill roots; portable skill copying supported |
 | **All Memories Search** | ✅ Done | Aggregate Claude memories across projects and search their Markdown bodies locally |
@@ -401,14 +402,14 @@ MIT
 ## Updates
 
 ### 2026-09-11
-- v0.20.0: Added inventory-first OpenCode and DeepSeek Harness support and expanded Codex inventory, including plugin-provided skills, hook configuration, and standalone profiles
+- v0.20.0: Added inventory-first OpenCode and DeepSeek Harness support and expanded Codex inventory, including custom agents, nested memories, skill enablement state, project/inline/plugin hooks, plugin-provided skills, and standalone profiles
 - Added a source-labelled All Memories scope and local body search across Claude memory files
 - Added Harness Doctor: Effective Context Map, explainable hygiene scoring, reversible exact-duplicate repair, and copy-only cross-harness skill migration
 - Added disabled-by-default anonymous monthly active-install metrics; detailed event aggregates remain local
 - Added full in-dashboard Markdown editing with conflict-safe serialized frontmatter saves
 - Rebuilt Session Distiller with exact backups, fresh UUIDs, a valid resume chain, and harness gating
 - Hardened the local server with a restrictive CSP, dependency-free safe Markdown rendering, race-resistant file reads, modernized MCP tool annotations, and updated dependencies
-- Added regression coverage; 394 tests pass (180 unit + 214 E2E)
+- Added regression coverage; 395 tests pass (180 unit + 215 E2E)
 
 ### 2026-04-28
 - v0.19.3: Fixed Claude Code preview loading for markdown-backed skills, memories, and agents when the markdown renderer fails

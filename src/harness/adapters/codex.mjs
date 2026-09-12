@@ -5,8 +5,8 @@
  */
 
 import TOML from "@iarna/toml";
-import { readdir, rm, unlink } from "node:fs/promises";
-import { basename, extname, join, relative, resolve } from "node:path";
+import { readdir, realpath, rm, unlink } from "node:fs/promises";
+import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
 import {
   exists,
   formatSize,
@@ -100,6 +100,17 @@ const categories = [
     deletable: true,
   }),
   defineCategory({
+    id: "agent",
+    label: "Agents",
+    filterLabel: "Agents",
+    icon: "🤖",
+    order: 35,
+    group: "agent",
+    source: "$CODEX_HOME/agents/*.toml and trusted <repo>/.codex/agents/*.toml",
+    preview: "*.toml",
+    deletable: true,
+  }),
+  defineCategory({
     id: "mcp",
     label: "MCP Servers",
     filterLabel: "MCP",
@@ -147,7 +158,7 @@ const categories = [
     icon: "🪝",
     order: 75,
     group: "hook",
-    source: "$CODEX_HOME/hooks.json and $CODEX_HOME/hooks",
+    source: "$CODEX_HOME and trusted <repo>/.codex hooks.json, inline config.toml hooks, hook scripts, and plugin hook config",
     preview: "hook source",
   }),
   defineCategory({
@@ -262,6 +273,14 @@ const CODEX_PROMPTS = {
           ico: "✏️",
           label: "Edit Skill",
           prompt: "I want to edit this Codex CLI skill: \"{{name}}\"\nPath: {{path}}\n\nBefore editing:\n1. Read SKILL.md and related files in this skill directory\n2. Explain when this skill triggers and what it instructs Codex to do\n3. Ask what I want to change\n4. Show the before/after diff\n5. Warn if the change could affect automatic skill selection\n6. Only save after I confirm",
+        },
+      ],
+      agent: [
+        { use: "common.explain" },
+        {
+          ico: "✏️",
+          label: "Edit Agent",
+          prompt: "I want to edit this Codex CLI custom agent: \"{{name}}\"\nPath: {{path}}\n\nBefore editing:\n1. Read the TOML file\n2. Explain its role, model, reasoning effort, sandbox, MCP, and skill overrides\n3. Ask what I want to change\n4. Show the exact before/after diff\n5. Warn if permissions or tool access would change\n6. Only save after I confirm",
         },
       ],
       mcp: [
@@ -753,24 +772,38 @@ async function scanMemories(scope, ctx) {
   const items = [];
   if (!(await exists(dir))) return items;
 
-  let entries;
-  try { entries = await readdir(dir, { withFileTypes: true }); } catch { return items; }
-
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
-    const path = join(dir, entry.name);
+  const memoryFiles = await findFilesBySuffix(dir, ".md", 6);
+  for (const path of memoryFiles) {
+    const rel = relative(dir, path);
+    if (rel.split(/[\\/]/).includes(".git")) continue;
     const stat = await safeStat(path);
     const content = await safeReadFile(path);
     const frontmatter = parseFrontmatter(content);
+    const fileName = basename(path);
+    const relParts = rel.split(/[\\/]/);
+    const [topLevelDir] = relParts;
+    const defaultName = topLevelDir === "skills" && fileName === "SKILL.md"
+      ? relParts.slice(0, -1).join("/")
+      : rel.replace(/\.md$/, "");
+    const subType = topLevelDir === "rollout_summaries"
+      ? "rollout-summary"
+      : topLevelDir === "skills"
+        ? "memory-skill"
+        : fileName === "raw_memories.md"
+          ? "raw-memory"
+          : fileName === "phase2_workspace_diff.md"
+            ? "memory-diff"
+            : "memory";
     items.push({
       category: "memory",
       scopeId: scope.id,
-      name: frontmatter.name || entry.name.replace(/\.md$/, ""),
-      fileName: entry.name,
+      name: frontmatter.name || defaultName,
+      fileName: rel,
       description: frontmatter.description || markdownDescription(content),
-      subType: frontmatter.type || "memory",
+      subType: frontmatter.type || subType,
       ...statFields(stat),
       path,
+      sourceFile: `$CODEX_HOME/memories/${rel.replaceAll("\\", "/")}`,
     });
   }
 
@@ -835,14 +868,16 @@ async function directorySummary(dir) {
   };
 }
 
-async function scanSkillRoot(scope, root, rootLabel, defaultSubType, lockAll = false) {
+async function scanSkillRoot(scope, root, rootLabel, defaultSubType, lockAll = false, skillNamespace = "") {
   const items = [];
   const skillDirs = await findSkillDirs(root);
 
   for (const skillDir of skillDirs) {
     const skillMd = join(skillDir, "SKILL.md");
     const content = await safeReadFile(skillMd);
-    const rel = relative(root, skillDir);
+    const frontmatter = parseFrontmatter(content);
+    const rel = relative(root, skillDir).replaceAll("\\", "/");
+    const declaredName = frontmatter.name || basename(skillDir);
     const summary = await directorySummary(skillDir);
     items.push({
       category: "skill",
@@ -855,8 +890,52 @@ async function scanSkillRoot(scope, root, rootLabel, defaultSubType, lockAll = f
       path: skillDir,
       openPath: skillMd,
       sourceFile: rootLabel,
+      skillNames: [...new Set([
+        declaredName,
+        basename(skillDir),
+        skillNamespace ? `${skillNamespace}:${declaredName}` : "",
+      ].filter(Boolean))],
       locked: lockAll || rel.startsWith(".system/"),
     });
+  }
+
+  return items;
+}
+
+async function canonicalPath(path) {
+  try { return await realpath(path); } catch { return resolve(path); }
+}
+
+async function applySkillEnablement(items, ctx) {
+  const parsed = await readCodexConfig(ctx);
+  const skillConfig = parsed.config?.skills;
+  const rules = Array.isArray(skillConfig?.config) ? skillConfig.config : [];
+  const itemPaths = new Map(await Promise.all(items.map(async item => [item, await canonicalPath(item.openPath)])));
+
+  if (skillConfig?.bundled?.enabled === false) {
+    for (const item of items) {
+      if (item.subType !== "system-skill") continue;
+      item.enabled = false;
+      item.enablementSource = "config.toml [skills.bundled]";
+    }
+  }
+
+  for (const rule of rules) {
+    if (!rule || typeof rule !== "object" || typeof rule.enabled !== "boolean") continue;
+    const hasName = typeof rule.name === "string" && rule.name.trim();
+    const hasPath = typeof rule.path === "string" && isAbsolute(rule.path);
+    if (Boolean(hasName) === Boolean(hasPath)) continue;
+    const rulePath = hasPath ? await canonicalPath(rule.path) : "";
+
+    for (const item of items) {
+      if (item.subType === "system-skill" && skillConfig?.bundled?.enabled === false) continue;
+      const matches = hasName
+        ? item.skillNames?.includes(rule.name.trim())
+        : itemPaths.get(item) === rulePath;
+      if (!matches) continue;
+      item.enabled = rule.enabled;
+      item.enablementSource = "config.toml [[skills.config]]";
+    }
   }
 
   return items;
@@ -889,10 +968,11 @@ async function scanSkills(scope, ctx) {
         `plugin:${pluginName}`,
         "plugin-skill",
         true,
+        pluginName,
       ));
     }
   }
-  return items;
+  return applySkillEnablement(items, ctx);
 }
 
 function mcpDescription(config) {
@@ -908,6 +988,43 @@ function projectConfigEnabled(scope) {
 async function readScopeConfig(scope, ctx) {
   if (scope.id === "global") return readCodexConfig(ctx);
   return readTomlFile(join(scope.repoDir, ".codex", "config.toml"));
+}
+
+async function scanAgents(scope, ctx) {
+  if (!projectConfigEnabled(scope)) return [];
+
+  const root = scope.id === "global"
+    ? join(codexDir(ctx), "agents")
+    : join(scope.repoDir, ".codex", "agents");
+  let entries;
+  try { entries = await readdir(root, { withFileTypes: true }); } catch { return []; }
+
+  const items = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".toml") || entry.name.startsWith(".")) continue;
+    const path = join(root, entry.name);
+    const parsed = await readTomlFile(path);
+    const config = parsed.config;
+    const name = compactText(config?.name) || entry.name.replace(/\.toml$/, "");
+    const description = parsed.error
+      ? `TOML parse error: ${parsed.error.message}`
+      : compactText(config?.description) || "Codex custom agent";
+    items.push({
+      category: "agent",
+      scopeId: scope.id,
+      name,
+      fileName: entry.name,
+      description,
+      subType: scope.id === "global" ? "custom-agent" : "project-agent",
+      ...statFields(parsed.stat),
+      path,
+      value: config || undefined,
+      valueType: parsed.error ? "invalid-toml" : "toml",
+      sourceFile: scope.id === "global" ? "$CODEX_HOME/agents" : ".codex/agents",
+    });
+  }
+
+  return items;
 }
 
 async function scanMcpServers(scope, ctx) {
@@ -1087,34 +1204,140 @@ async function scanPlugins(scope, ctx) {
   return items;
 }
 
-async function scanHooks(scope, ctx) {
-  if (scope.id !== "global") return [];
-  const root = join(codexDir(ctx), "hooks");
-  const files = await findFilesBySuffix(root, "", 5);
-  const items = [];
+function hookEventCount(hooks) {
+  return objectEntries(hooks).filter(([, groups]) => Array.isArray(groups)).length;
+}
 
-  const configPath = join(codexDir(ctx), "hooks.json");
+function hookConfigDescription(hooks, prefix = "Codex hook configuration") {
+  const count = hookEventCount(hooks);
+  return count ? `${prefix} (${count} event groups)` : prefix;
+}
+
+function hookConfigItem({ scopeId, name, fileName, path, stat, hooks, value, valueType, subType = "hook-config", sourceFile }) {
+  return {
+    category: "hook",
+    scopeId,
+    name,
+    fileName,
+    description: hookConfigDescription(hooks),
+    subType,
+    ...statFields(stat),
+    path,
+    value,
+    valueType,
+    sourceFile,
+    locked: true,
+  };
+}
+
+async function scanPluginHooks(scope, ctx) {
+  if (scope.id !== "global") return [];
+
+  const root = join(codexDir(ctx), "plugins");
+  const items = [];
+  for (const { dir, manifestPath } of await findPluginManifests(root)) {
+    const manifest = await readJson(manifestPath) || {};
+    const pluginName = manifest.name || manifest.id || basename(dir);
+    const manifestStat = await safeStat(manifestPath);
+    const canonicalPluginRoot = await canonicalPath(dir);
+    let definitions = manifest.hooks;
+
+    if (definitions === undefined) {
+      const defaultPath = join(dir, "hooks", "hooks.json");
+      if (await safeStat(defaultPath)) definitions = "./hooks/hooks.json";
+    }
+    if (!Array.isArray(definitions)) definitions = definitions === undefined ? [] : [definitions];
+
+    let inlineIndex = 0;
+    for (const definition of definitions) {
+      if (definition && typeof definition === "object" && !Array.isArray(definition)) {
+        inlineIndex += 1;
+        const hooks = definition.hooks || definition;
+        items.push(hookConfigItem({
+          scopeId: scope.id,
+          name: `${pluginName}: inline hooks${definitions.length > 1 ? ` ${inlineIndex}` : ""}`,
+          fileName: relative(root, manifestPath),
+          path: manifestPath,
+          stat: manifestStat,
+          hooks,
+          value: definition,
+          valueType: "json",
+          subType: "plugin-hook-config",
+          sourceFile: `plugin:${pluginName}`,
+        }));
+        continue;
+      }
+
+      if (typeof definition !== "string" || !definition.startsWith("./")) continue;
+      const hookPath = resolve(dir, definition);
+      let canonicalHookPath;
+      try { canonicalHookPath = await realpath(hookPath); } catch { continue; }
+      const relToPlugin = relative(canonicalPluginRoot, canonicalHookPath);
+      if (!relToPlugin || relToPlugin.startsWith("..") || isAbsolute(relToPlugin)) continue;
+      const stat = await safeStat(canonicalHookPath);
+      if (!stat) continue;
+      const config = await readJson(canonicalHookPath);
+      items.push(hookConfigItem({
+        scopeId: scope.id,
+        name: `${pluginName}: ${relToPlugin.replaceAll("\\", "/")}`,
+        fileName: relToPlugin,
+        path: canonicalHookPath,
+        stat,
+        hooks: config?.hooks,
+        value: config || undefined,
+        valueType: config ? "json" : "invalid-json",
+        subType: "plugin-hook-config",
+        sourceFile: `plugin:${pluginName}`,
+      }));
+    }
+  }
+
+  return items;
+}
+
+async function scanHooks(scope, ctx) {
+  if (!projectConfigEnabled(scope)) return [];
+  const layerRoot = scope.id === "global" ? codexDir(ctx) : join(scope.repoDir, ".codex");
+  const scriptsRoot = join(layerRoot, "hooks");
+  const files = await findFilesBySuffix(scriptsRoot, "", 5);
+  const items = [];
+  const sourcePrefix = scope.id === "global" ? "$CODEX_HOME" : ".codex";
+
+  const configPath = join(layerRoot, "hooks.json");
   const configStat = await safeStat(configPath);
   if (configStat) {
     const config = await readJson(configPath);
-    const eventCount = objectEntries(config?.hooks).length;
-    items.push({
-      category: "hook",
+    items.push(hookConfigItem({
       scopeId: scope.id,
       name: "hooks.json",
       fileName: "hooks.json",
-      description: eventCount ? `Codex hook configuration (${eventCount} event groups)` : "Codex hook configuration",
-      subType: "hook-config",
-      ...statFields(configStat),
       path: configPath,
+      stat: configStat,
+      hooks: config?.hooks,
       value: config || undefined,
       valueType: config ? "json" : "invalid-json",
-      locked: true,
-    });
+      sourceFile: `${sourcePrefix}/hooks.json`,
+    }));
+  }
+
+  const parsed = await readScopeConfig(scope, ctx);
+  if (parsed.config?.hooks && typeof parsed.config.hooks === "object") {
+    items.push(hookConfigItem({
+      scopeId: scope.id,
+      name: "config.toml inline hooks",
+      fileName: "config.toml",
+      path: parsed.path,
+      stat: parsed.stat,
+      hooks: parsed.config.hooks,
+      value: { hooks: parsed.config.hooks },
+      valueType: "toml-table",
+      subType: "inline-hook-config",
+      sourceFile: `${sourcePrefix}/config.toml`,
+    }));
   }
 
   for (const path of files) {
-    const rel = relative(root, path);
+    const rel = relative(scriptsRoot, path);
     if (rel.split(/[\\/]/).includes("__pycache__") || path.endsWith(".pyc")) continue;
     const stat = await safeStat(path);
     items.push({
@@ -1126,10 +1349,12 @@ async function scanHooks(scope, ctx) {
       subType: extname(path).replace(/^\./, "") || "hook",
       ...statFields(stat),
       path,
+      sourceFile: `${sourcePrefix}/hooks`,
       locked: true,
     });
   }
 
+  if (scope.id === "global") items.push(...await scanPluginHooks(scope, ctx));
   return items;
 }
 
@@ -1364,7 +1589,7 @@ const unsupportedOperations = {
         return { ok: true, deleted: item.path, message: `Deleted Codex skill "${item.name}"` };
       }
 
-      if (["memory", "rule"].includes(item.category)) {
+      if (["agent", "memory", "rule"].includes(item.category)) {
         await unlink(item.path);
         return { ok: true, deleted: item.path, message: `Deleted Codex ${item.category} "${item.name}"` };
       }
@@ -1413,6 +1638,7 @@ export const codexAdapter = {
     config: scanConfig,
     memory: scanMemories,
     skill: scanSkills,
+    agent: scanAgents,
     mcp: scanMcpServers,
     profile: scanProfiles,
     rule: scanRules,

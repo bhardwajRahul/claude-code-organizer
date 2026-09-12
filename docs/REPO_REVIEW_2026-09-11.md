@@ -32,7 +32,7 @@ Official harness UIs now expose more of their own skills and plugins, so a singl
 - Bound the dashboard to `127.0.0.1`, rejected non-local host headers and cross-site mutations, limited request bodies to 1 MiB, and restricted file reads/writes to scanned items and adapter-approved roots.
 - Fixed Windows/external-project path handling by allowing discovered project roots instead of all of HOME.
 - Marked Codex system skills, cached plugins, and Claude plugin-provided skills as locked.
-- Honored custom `$CODEX_HOME` roots and added Codex plugin-provided skill, hook configuration/script, and standalone profile inventory.
+- Honored custom `$CODEX_HOME` roots and added Codex custom agents, nested local-memory artifacts, explicit skill enablement state, plugin-provided skills, user/project/inline/plugin hook configuration, hook scripts, and standalone profile inventory.
 - Migrated MCP tools to the current registration API and supplied read-only, destructive, idempotent, and open-world annotations.
 - Fixed issue #35's unquoted YAML `argument-hint`.
 - Rebuilt Session Distiller's resume graph, restricted it to Claude's active branch across compact boundaries, and added exact-snapshot, malformed-input, concurrency, branch, and real-resume verification.

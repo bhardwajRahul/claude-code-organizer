@@ -187,6 +187,42 @@ async function createTestEnv() {
     }
   }, null, 2));
 
+  // ── Codex inventory ──
+  const codexDir = join(tmpDir, '.codex');
+  const codexSkillDir = join(codexDir, 'skills', 'demo-skill');
+  await Promise.all([
+    mkdir(join(codexDir, 'agents'), { recursive: true }),
+    mkdir(join(codexDir, 'memories', 'rollout_summaries'), { recursive: true }),
+    mkdir(codexSkillDir, { recursive: true }),
+    mkdir(join(codexDir, 'hooks'), { recursive: true }),
+  ]);
+  await writeFile(join(codexDir, 'config.toml'), `
+[[skills.config]]
+path = "${join(codexSkillDir, 'SKILL.md').replaceAll('\\', '/')}"
+enabled = false
+
+[[hooks.PreToolUse]]
+matcher = "^shell$"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "node ~/.codex/hooks/check.mjs"
+`);
+  await writeFile(join(codexSkillDir, 'SKILL.md'), `---
+name: demo-skill
+description: Test Codex inventory rendering.
+---
+# Demo Skill
+`);
+  await writeFile(join(codexDir, 'agents', 'reviewer.toml'), `
+name = "reviewer"
+description = "Review code for correctness."
+developer_instructions = "Lead with concrete findings."
+model = "gpt-5.6-terra"
+`);
+  await writeFile(join(codexDir, 'memories', 'rollout_summaries', 'recent.md'), '# Recent rollout\n\nRemember the preview regression.\n');
+  await writeFile(join(codexDir, 'hooks', 'check.mjs'), 'console.log("checked")\n');
+
   // ── Project-level MCP (in repo root) ──
   // 'test-server' exists in both global and project → tests MCP shadowing
   await writeFile(join(projectDir, '.mcp.json'), JSON.stringify({
@@ -1075,6 +1111,34 @@ test.describe('UI Rendering', () => {
 
     // Allow time for any lazy errors
     await page.waitForTimeout(500);
+    expect(errors).toEqual([]);
+  });
+
+  test('Codex inventory renders agents, nested memories, skill state, inline hooks, and raw hook scripts', async ({ page }) => {
+    const errors = collectConsoleErrors(page);
+    await page.goto(env.baseURL);
+    await page.waitForSelector('#loading', { state: 'hidden' });
+    await page.locator('#harnessSelector').selectOption('codex');
+    await expect(page.locator('#contentTitle')).toContainText('Global');
+
+    await page.locator('.s-cat[data-scope-id="global"][data-cat="skill"]').click();
+    const skill = page.locator('.item[data-category="skill"]', { hasText: 'demo-skill' });
+    await expect(skill).toContainText('Config: off');
+
+    await page.locator('.s-cat[data-scope-id="global"][data-cat="agent"]').click();
+    await expect(page.locator('.item[data-category="agent"]', { hasText: 'reviewer' })).toBeVisible();
+
+    await page.locator('.s-cat[data-scope-id="global"][data-cat="memory"]').click();
+    await expect(page.locator('.item[data-category="memory"]', { hasText: 'rollout_summaries/recent' })).toBeVisible();
+
+    await page.locator('.s-cat[data-scope-id="global"][data-cat="hook"]').click();
+    const inlineHook = page.locator('.item[data-category="hook"]', { hasText: 'config.toml inline hooks' });
+    await inlineHook.click();
+    await expect(page.locator('#previewContent')).toContainText('PreToolUse');
+
+    const hookScript = page.locator('.item[data-category="hook"]', { hasText: 'check.mjs' });
+    await hookScript.click();
+    await expect(page.locator('#previewContent')).toContainText('console.log');
     expect(errors).toEqual([]);
   });
 

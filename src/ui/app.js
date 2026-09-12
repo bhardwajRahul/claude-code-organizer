@@ -1564,6 +1564,11 @@ function renderItem(item) {
   const secBadgeHtml = secSev
     ? `<span class="sec-badge sec-${secSev} item-sec-flag">${secLabel}</span>`
     : "";
+  const enablementBadge = item.enabled === false
+    ? `<span class="item-state-badge state-disabled" title="User config sets this off in ${esc(item.enablementSource || "harness config")}">Config: off</span>`
+    : item.enabled === true
+      ? `<span class="item-state-badge state-enabled" title="User config sets this on in ${esc(item.enablementSource || "harness config")}">Config: on</span>`
+      : "";
   // Baseline status flag (NEW / CHANGED) for MCP items
   const blStatus = item.category === "mcp" ? (securityBaselineStatus[item.name] || null) : null;
   const blFlagHtml = blStatus === "new"
@@ -1579,7 +1584,7 @@ function renderItem(item) {
       <span class="item-ico">${icon}</span>
       ${effectiveBadge}${originBadge}
       <span class="item-name">${esc(item.name)}</span>
-      ${secBadgeHtml}${blFlagHtml}${isMcpDisabled ? `<span class="mcp-disabled-badge" title="Disabled in this project — all servers named '${esc(item.name)}' won't load here">Disabled</span>` : ""}
+      ${secBadgeHtml}${blFlagHtml}${enablementBadge}${isMcpDisabled ? `<span class="mcp-disabled-badge" title="Disabled in this project — all servers named '${esc(item.name)}' won't load here">Disabled</span>` : ""}
       ${badgeHtml}
       <span class="item-desc">${item.category === "mcp" ? "" : esc(desc)}</span>
       ${actions}
@@ -1700,8 +1705,33 @@ function renderEffectiveBehavior(item) {
   const isConflict = effectiveConflictKeys.has(key);
   const scope      = getScopeById(item.scopeId);
   const scopeName  = scope?.name || item.scopeId;
+  const harnessId  = getHarnessDescriptor().id;
 
   let why = "";
+
+  if (harnessId === "codex") {
+    if (typeof item.enabled === "boolean") {
+      why = `This skill has an explicit ${item.enabled ? "enabled" : "disabled"} setting in ${item.enablementSource || "Codex config"}. Other managed, plugin, or session layers can still affect whether Codex loads it.`;
+    } else if (item.category === "skill") {
+      why = `Discovered from ${item.sourceFile || "a Codex skill root"}. No explicit skills.config override matched it.`;
+    } else if (item.category === "agent") {
+      why = isGlobal
+        ? "This personal custom agent is available from $CODEX_HOME/agents."
+        : "This project custom agent is loaded from the trusted project's .codex/agents directory.";
+    } else if (item.category === "hook") {
+      why = isGlobal
+        ? `This hook source is part of the user or installed-plugin Codex layer (${item.sourceFile || "global"}).`
+        : `This hook source loads from the trusted project layer (${item.sourceFile || ".codex"}).`;
+    } else if (item.category === "memory") {
+      why = "This is local Codex-generated memory state. Codex may regenerate it; keep durable required instructions in AGENTS.md.";
+    } else {
+      why = item.sourceFile ? `Inventory source: ${item.sourceFile}.` : `Stored in the ${scopeName} Codex scope.`;
+    }
+
+    wrap.classList.remove("hidden");
+    text.textContent = why;
+    return;
+  }
 
   switch (item.category) {
     case "skill":
@@ -1797,6 +1827,11 @@ const CODEX_ITEM_CONFIG_FIELDS = {
   skill: [
     { key: "name", label: "Name", type: "text", placeholder: "(not set) — uses folder name", tooltip: "Codex skill frontmatter field used as the skill identifier." },
     { key: "description", label: "Description", type: "textarea", placeholder: "(not set) — describe when Codex should use this skill", tooltip: "Codex uses this description to decide when the skill is relevant." },
+  ],
+  agent: [
+    { key: "model", label: "Model", source: "value", type: "text", readOnly: true, placeholder: "(inherits parent model)", tooltip: "Model override from this Codex custom-agent TOML file." },
+    { key: "model_reasoning_effort", label: "Reasoning effort", source: "value", type: "text", readOnly: true, placeholder: "(inherits parent effort)", tooltip: "Reasoning effort override from this Codex custom-agent TOML file." },
+    { key: "sandbox_mode", label: "Sandbox", source: "value", type: "text", readOnly: true, placeholder: "(inherits parent sandbox)", tooltip: "Sandbox override from this Codex custom-agent TOML file." },
   ],
   profile: [
     { key: "model", label: "Model", source: "value", type: "text", readOnly: true, placeholder: "(inherits global model)", tooltip: "Codex profile model override from ~/.codex/config.toml." },
@@ -3103,21 +3138,30 @@ async function loadPreview(item) {
     }
 
     if (item.category === "hook") {
-      const res = await fetchJson(`/api/file-content?path=${encodeURIComponent(item.path)}`);
-      if (currentKey !== detailPreviewKey) return;
-      if (res.ok) {
-        const settings = JSON.parse(res.content);
-        const hookConfig = settings.hooks?.[item.name];
-        if (hookConfig) {
-          preview.textContent = "";
-          preview.innerHTML = renderHighlightedSource(JSON.stringify(hookConfig, null, 2), "json");
+      if (item.value !== undefined) {
+        if (currentKey !== detailPreviewKey) return;
+        preview.textContent = "";
+        preview.innerHTML = renderHighlightedSource(JSON.stringify(item.value, null, 2), "json");
+        return;
+      }
+
+      if (getHarnessDescriptor().id === "claude") {
+        const res = await fetchJson(`/api/file-content?path=${encodeURIComponent(item.path)}`);
+        if (currentKey !== detailPreviewKey) return;
+        if (res.ok) {
+          const settings = JSON.parse(res.content);
+          const hookConfig = settings.hooks?.[item.name];
+          if (hookConfig) {
+            preview.textContent = "";
+            preview.innerHTML = renderHighlightedSource(JSON.stringify(hookConfig, null, 2), "json");
+          } else {
+            preview.textContent = item.description || "(no content)";
+          }
         } else {
           preview.textContent = item.description || "(no content)";
         }
-      } else {
-        preview.textContent = item.description || "(no content)";
+        return;
       }
-      return;
     }
 
     if (item.category === "plugin") {
