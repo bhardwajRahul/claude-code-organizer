@@ -85,6 +85,12 @@ their final version links and be closed.
 
 - If a transient external step fails, rerun the same workflow. npm and MCP
   Registry publication checks make reruns idempotent.
+- If an npm recovery code was used to regain access, npm applies a 72-hour
+  security hold. During that hold, package settings cannot be changed and
+  packages cannot be published, even after a successful 2FA challenge. The
+  hold cannot be lifted early and expires automatically; wait for it to end
+  before configuring the trusted publisher or pushing the release tag. See
+  [npm's account-recovery documentation](https://docs.npmjs.com/recovering-your-2fa-enabled-account/).
 - If code or metadata must change after any registry accepted the version,
   prepare a new patch version. Never overwrite a published artifact or move its
   public tag.
