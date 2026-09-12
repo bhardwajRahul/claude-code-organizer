@@ -186,9 +186,8 @@ Current research artifacts include:
 Quick smoke run:
 
 ```bash
-python3 -m venv research/.venv-audit
-research/.venv-audit/bin/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-research/.venv-audit/bin/python -m pip install "transformers>=4.40" sentencepiece scikit-learn numpy psutil sae-lens jsonschema
+uv venv --python 3.10 research/.venv-audit
+uv pip sync --python research/.venv-audit/bin/python --torch-backend cpu research/requirements-bench.txt
 research/.venv-audit/bin/python -m research.benchmarks.activation_scanner_benchmark --list-models
 research/.venv-audit/bin/python -m research.validate_curated_dataset --pretty
 research/.venv-audit/bin/python -m research.train_probe_artifact --model qwen2.5-0.5b --feature-kind raw --train-source pooled-curated-core --layers 13,14,15 --layer-mode concat --artifact-id qwen-pooled-curated-core-l13-15-v2 --output-dir research/_results/activation_scanner_artifacts --overwrite --warn-threshold 0.30 --block-threshold 0.85 --pretty

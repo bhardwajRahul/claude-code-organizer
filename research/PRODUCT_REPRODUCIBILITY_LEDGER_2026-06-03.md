@@ -32,13 +32,16 @@ Current product posture:
 From the repository root:
 
 ```bash
-python3 -m venv research/.venv-audit
-research/.venv-audit/bin/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-research/.venv-audit/bin/python -m pip install "transformers>=4.40" sentencepiece scikit-learn numpy psutil sae-lens jsonschema
+uv venv --python 3.10 research/.venv-audit
+uv pip sync --python research/.venv-audit/bin/python --torch-backend cpu research/requirements-bench.txt
 ```
 
 Use the repository venv for scanner, benchmark, and calibration commands.
 System Python may not have `numpy` or `transformers`.
+
+The exact dependency snapshot used for this dated ledger is preserved in
+`research/requirements-bench-2026-06-03.freeze`; the current installable lock is
+regenerated from `research/requirements-bench.in`.
 
 Qwen2.5-0.5B is not gated. Gemma lanes may need a Hugging Face token, but the
 current Qwen product-candidate run does not depend on a private model.

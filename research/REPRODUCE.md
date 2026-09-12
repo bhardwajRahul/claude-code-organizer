@@ -67,16 +67,19 @@ This is the reasoning chain, not a tidy after-the-fact story. The self-correctio
 
 ```bash
 cd ~/MyGithub/claude-code-organizer/research
-python3 -m venv .venv-bench && . .venv-bench/bin/activate
-# torch MUST come from the CPU index; everything else from PyPI (this split matters —
-# putting transformers under the torch index fails with "No matching distribution").
-pip install torch --index-url https://download.pytorch.org/whl/cpu
-pip install "transformers>=4.40" sentencepiece scikit-learn numpy
-pip install sae_lens            # pulls transformer_lens
+uv venv --python 3.10 .venv-bench
+uv pip sync --python .venv-bench/bin/python --torch-backend cpu requirements-bench.txt
 ```
 
-Reference versions captured this session (`requirements-bench.txt` has the full 101-line freeze):
+Reference versions captured for the original 2026-06-03 results
+(`requirements-bench-2026-06-03.freeze` preserves the full historical freeze):
 Python 3.10.12 · torch 2.12.0+cpu · transformers 5.9.0 · scikit-learn 1.7.2 · numpy 2.2.6 · sae-lens 6.44.2 · transformer-lens 3.3.0 · sentencepiece 0.2.1.
+
+For current reruns, `requirements-bench.in` records the direct dependencies and
+`requirements-bench.txt` is a uv-resolved CPython 3.10 Linux lock with patched
+dependency versions. The historical freeze is evidence for the original run,
+not a safe current install input. Dependency resolution of the current lock is
+verified separately from reproducing the published experiment metrics.
 
 > Note: `sae_lens` 6.x moved hook metadata to `sae.cfg.metadata.hook_name` (the scripts already handle this). HF models pulled automatically: `gpt2`, `protectai/deberta-v3-base-prompt-injection-v2`, `HuggingFaceTB/SmolLM2-360M`, `Qwen/Qwen2.5-0.5B`, SAE `gpt2-small-res-jb`, and `gemma-scope-2b-pt-res-canonical` (SAE only; the gemma-2-2b *model* is HF-gated and NOT required for any result here).
 
@@ -194,6 +197,6 @@ Honest reading: SAE consistently ≥ raw on the cross-family direction (never hu
 
 ## 8. File index
 - Paper: `activation-probe-tool-poisoning.md`
-- Scripts: the `*.py` above + `requirements-bench.txt`
+- Scripts: the `*.py` above + `requirements-bench-2026-06-03.freeze`
 - Results: `benchmark-results-deberta-vs-probe-2026-05-31.md`, `related-work-activation-probing-survey-2026-05.md`
 - Data: `datasets/`

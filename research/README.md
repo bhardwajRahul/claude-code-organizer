@@ -58,12 +58,16 @@ The short version:
 From the repository root:
 
 ```bash
-python3 -m venv research/.venv-audit
-research/.venv-audit/bin/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-research/.venv-audit/bin/python -m pip install "transformers>=4.40" sentencepiece scikit-learn numpy psutil sae-lens jsonschema
+uv venv --python 3.10 research/.venv-audit
+uv pip sync --python research/.venv-audit/bin/python --torch-backend cpu research/requirements-bench.txt
 research/.venv-audit/bin/python -m research.benchmarks.activation_scanner_benchmark --list-models
 research/.venv-audit/bin/python -m research.benchmarks.activation_scanner_benchmark --suite cross-style --model pythia-70m --layers 2 --with-sae --sae pythia-70m-deduped-l2 --text-baseline tfidf --dedupe --measure-runtime
 ```
+
+`requirements-bench.in` contains the direct dependencies for current reruns;
+`requirements-bench.txt` is the uv-resolved CPython 3.10 Linux lock. The exact
+environment used for the 2026-06-03 results remains archived as
+`requirements-bench-2026-06-03.freeze` and is not a current install input.
 
 Qwen2.5-0.5B fixed layers 13,14,15 is the current product-candidate lane.
 Pythia remains the cheap canary because it is small and open. Gemma lanes are
