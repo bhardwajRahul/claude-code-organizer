@@ -23,6 +23,9 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           package-manager-cache: false
 
+      - name: Install OIDC-capable npm CLI
+        run: npm install --global npm@11.6.2
+
       - name: Install dependencies
         run: |
           if [ -f package-lock.json ]; then

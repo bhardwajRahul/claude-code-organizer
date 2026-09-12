@@ -21,7 +21,8 @@ In the npm package settings, add a GitHub Actions trusted publisher with:
 - Permission: allow `npm publish`
 
 The repository workflow uses GitHub OIDC for both npm and the MCP Registry. It
-does not use a long-lived npm token.
+does not use a long-lived npm token. The workflow pins npm CLI 11.6.2 because
+trusted publishing requires npm 11.5.1 or later.
 
 ## Prepare a version
 
