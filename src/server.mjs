@@ -49,19 +49,100 @@ const HOME = homedir();
 const CLAUDE_DIR = join(HOME, ".claude");
 const BACKUP_DIR = join(HOME, ".claude-backups");
 const BACKUP_EXCLUDED_CATEGORIES = new Set(["setting", "hook", "session", "history", "shell", "runtime"]);
+const MAX_REQUEST_BODY_BYTES = 1024 * 1024;
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+const fileWriteQueues = new Map();
 
 /**
  * Validate that a file path is within allowed directories.
  * Prevents path traversal attacks (e.g. ../../etc/passwd).
  */
-function isPathAllowed(filePath) {
+function normalizedPath(filePath) {
   const resolved = resolve(filePath);
-  // Allow paths under ~/.claude/ or under any discovered project repoDir
-  // Uses path.sep for cross-platform support (fixes Windows #12)
-  if (resolved.startsWith(CLAUDE_DIR + sep) || resolved === CLAUDE_DIR) return true;
-  // Allow paths under HOME (covers repo dirs with .mcp.json, CLAUDE.md etc)
-  if (resolved.startsWith(HOME + sep)) return true;
-  return false;
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+function isPathWithin(filePath, root) {
+  if (!filePath || !root || !isAbsolute(filePath) || !isAbsolute(root)) return false;
+  const candidate = normalizedPath(filePath);
+  const allowedRoot = normalizedPath(root);
+  return candidate === allowedRoot || candidate.startsWith(allowedRoot + sep);
+}
+
+function itemFilePaths(item) {
+  const paths = [item?.path, item?.openPath].filter(Boolean);
+  if (item?.category === "skill" && item.path) paths.push(join(item.path, "SKILL.md"));
+  return paths.filter(isAbsolute);
+}
+
+function findKnownItem(filePath, cachedData) {
+  if (!cachedData?.items || !isAbsolute(filePath)) return null;
+  const candidate = normalizedPath(filePath);
+  return cachedData.items.find((item) =>
+    itemFilePaths(item).some((knownPath) => normalizedPath(knownPath) === candidate)
+  ) || null;
+}
+
+async function allowedPathRoots(harnessId, cachedData) {
+  const pathInfo = await getHarnessPathInfo(harnessId);
+  const roots = [
+    ...(pathInfo.safeRoots || []),
+    pathInfo.rootDir,
+    pathInfo.backupDir,
+    pathInfo.securityDir,
+  ];
+
+  for (const scope of cachedData?.scopes || []) {
+    if (scope.repoDir) roots.push(scope.repoDir);
+    if (scope.claudeProjectDir) roots.push(scope.claudeProjectDir);
+  }
+
+  return roots.filter((root) => root && isAbsolute(root));
+}
+
+async function isPathAllowed(filePath, harnessId, cachedData, { knownOnly = false } = {}) {
+  if (!filePath || !isAbsolute(filePath)) return false;
+  if (findKnownItem(filePath, cachedData)) return true;
+  if (knownOnly) return false;
+  const roots = await allowedPathRoots(harnessId, cachedData);
+  return roots.some((root) => isPathWithin(filePath, root));
+}
+
+async function serializeFileWrite(filePath, operation) {
+  const key = normalizedPath(filePath);
+  const previous = fileWriteQueues.get(key) || Promise.resolve();
+  const current = previous.catch(() => {}).then(operation);
+  fileWriteQueues.set(key, current);
+  try {
+    return await current;
+  } finally {
+    if (fileWriteQueues.get(key) === current) fileWriteQueues.delete(key);
+  }
+}
+
+function isTrustedLocalRequest(req) {
+  let requestHost;
+  try {
+    requestHost = new URL(`http://${req.headers.host || ""}`);
+  } catch {
+    return false;
+  }
+  if (!LOOPBACK_HOSTS.has(requestHost.hostname)) return false;
+
+  const method = (req.method || "GET").toUpperCase();
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) return true;
+
+  const fetchSite = req.headers["sec-fetch-site"];
+  if (fetchSite && !["same-origin", "none"].includes(fetchSite)) return false;
+
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    const parsedOrigin = new URL(origin);
+    return LOOPBACK_HOSTS.has(parsedOrigin.hostname) && parsedOrigin.host === requestHost.host;
+  } catch {
+    return false;
+  }
 }
 
 const UI_DIR = join(import.meta.dirname, "ui");
@@ -130,6 +211,7 @@ async function getHarnessPathInfo(harnessId = getDefaultAdapterId()) {
     backupDir,
     backupConfig: join(backupDir, "config.json"),
     securityDir: join(rootDir, ".cco-security"),
+    safeRoots: paths.safeRoots || [rootDir],
   };
 }
 
@@ -171,8 +253,19 @@ function requestErrorStatus(err, fallback = 500) {
 }
 
 async function readBody(req) {
-  let body = "";
-  for await (const chunk of req) body += chunk;
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
+    if (size > MAX_REQUEST_BODY_BYTES) {
+      const err = new Error("Request body is too large");
+      err.statusCode = 413;
+      throw err;
+    }
+    chunks.push(buffer);
+  }
+  const body = Buffer.concat(chunks).toString("utf-8");
   if (!body.trim()) return {};
   try {
     return JSON.parse(body);
@@ -454,7 +547,8 @@ async function handleRequest(req, res) {
   // POST /api/restore — restore a deleted file (for undo)
   if (path === "/api/restore" && req.method === "POST") {
     const { filePath, content, isDir } = await readBody(req);
-    if (!filePath || !isAbsolute(filePath) || !isPathAllowed(filePath)) {
+    if (!cachedData) await freshScan();
+    if (!filePath || !await isPathAllowed(filePath, harnessId, cachedData)) {
       return json(res, { ok: false, error: "Invalid or disallowed path" }, 400);
     }
     try {
@@ -479,7 +573,8 @@ async function handleRequest(req, res) {
   // POST /api/restore-mcp — restore a deleted MCP server entry
   if (path === "/api/restore-mcp" && req.method === "POST") {
     const { name, config, mcpJsonPath } = await readBody(req);
-    if (!name || !config || !mcpJsonPath || !isPathAllowed(mcpJsonPath)) {
+    if (!cachedData) await freshScan();
+    if (!name || !config || !mcpJsonPath || !await isPathAllowed(mcpJsonPath, harnessId, cachedData)) {
       return json(res, { ok: false, error: "Missing name, config, or mcpJsonPath, or disallowed path" }, 400);
     }
     try {
@@ -503,7 +598,8 @@ async function handleRequest(req, res) {
   // GET /api/file-content?path=... — read file content for detail panel
   if (path === "/api/file-content" && req.method === "GET") {
     const filePath = url.searchParams.get("path");
-    if (!filePath || !isAbsolute(filePath) || !isPathAllowed(filePath)) {
+    if (!cachedData) await freshScan();
+    if (!filePath || !await isPathAllowed(filePath, harnessId, cachedData, { knownOnly: true })) {
       return json(res, { ok: false, error: "Invalid or disallowed path" }, 400);
     }
     try {
@@ -514,19 +610,32 @@ async function handleRequest(req, res) {
     }
   }
 
-  // POST /api/save-frontmatter — write updated markdown file content (skills, agents, memories)
-  if (path === "/api/save-frontmatter" && req.method === "POST") {
+  // POST /api/save-markdown — write an updated scanned Markdown file.
+  // Keep /api/save-frontmatter as a compatibility alias for older dashboards.
+  if (["/api/save-markdown", "/api/save-frontmatter"].includes(path) && req.method === "POST") {
     try {
       const body = await readBody(req);
-      const { path: filePath, content } = body;
-      if (!filePath || !isAbsolute(filePath) || !isPathAllowed(filePath)) {
+      const { path: filePath, content, expectedContent } = body;
+      if (!cachedData) await freshScan();
+      const knownItem = findKnownItem(filePath, cachedData);
+      if (!filePath || !knownItem || (knownItem.locked && !knownItem.editable) || !await isPathAllowed(filePath, harnessId, cachedData, { knownOnly: true })) {
         return json(res, { ok: false, error: "Invalid or disallowed path" }, 400);
       }
       if (!filePath.endsWith(".md")) {
         return json(res, { ok: false, error: "Only .md files can be updated" }, 400);
       }
-      const { writeFile: wf } = await import("node:fs/promises");
-      await wf(filePath, content, "utf-8");
+      await serializeFileWrite(filePath, async () => {
+        if (typeof expectedContent === "string") {
+          const currentContent = await readFile(filePath, "utf-8");
+          if (currentContent !== expectedContent) {
+            const err = new Error("File changed since it was opened. Reopen it before saving.");
+            err.statusCode = 409;
+            throw err;
+          }
+        }
+        const { writeFile: wf } = await import("node:fs/promises");
+        await wf(filePath, content, "utf-8");
+      });
       invalidateCachedData(harnessId);
       cachedData = null;
       return json(res, { ok: true });
@@ -538,7 +647,8 @@ async function handleRequest(req, res) {
   // GET /api/session-preview?path=... — parse JSONL session into structured conversation
   if (path === "/api/session-preview" && req.method === "GET") {
     const filePath = url.searchParams.get("path");
-    if (!filePath || !filePath.endsWith(".jsonl") || !isPathAllowed(filePath)) {
+    if (!cachedData) await freshScan();
+    if (!filePath || !filePath.endsWith(".jsonl") || !await isPathAllowed(filePath, harnessId, cachedData, { knownOnly: true })) {
       return json(res, { ok: false, error: "Invalid or disallowed session path" }, 400);
     }
     try {
@@ -605,7 +715,8 @@ async function handleRequest(req, res) {
   // GET /api/session-cost?path=... — parse JSONL session and compute per-model cost breakdown
   if (path === "/api/session-cost" && req.method === "GET") {
     const filePath = url.searchParams.get("path");
-    if (!filePath || !filePath.endsWith(".jsonl") || !isPathAllowed(filePath)) {
+    if (!cachedData) await freshScan();
+    if (!filePath || !filePath.endsWith(".jsonl") || !await isPathAllowed(filePath, harnessId, cachedData, { knownOnly: true })) {
       return json(res, { ok: false, error: "Invalid or disallowed session path" }, 400);
     }
     // pricing per million tokens [input, output, cacheRead, cacheWrite, webSearch per req]
@@ -694,8 +805,17 @@ async function handleRequest(req, res) {
 
   // POST /api/session-distill?path=... — distill a session (backup + clean JSONL + index)
   if (path === "/api/session-distill" && req.method === "POST") {
+    if (!activeAdapter.capabilities.sessionDistill) {
+      return json(res, unavailableForHarness(activeAdapter, "Session Distiller"), 400);
+    }
     const filePath = url.searchParams.get("path");
-    if (!filePath || !filePath.endsWith(".jsonl") || !isPathAllowed(filePath)) {
+    if (!cachedData) await freshScan();
+    const knownItem = filePath ? findKnownItem(filePath, cachedData) : null;
+    if (
+      !filePath || !filePath.endsWith(".jsonl") || knownItem?.subType !== "session" ||
+      knownItem.name?.startsWith("[distilled") ||
+      !await isPathAllowed(filePath, harnessId, cachedData, { knownOnly: true })
+    ) {
       return json(res, { ok: false, error: "Invalid or disallowed session path" }, 400);
     }
     try {
@@ -1245,6 +1365,9 @@ export function startServer(port = 3847, maxRetries = 10) {
   }
 
   const server = createServer(async (req, res) => {
+    if (!isTrustedLocalRequest(req)) {
+      return json(res, { ok: false, error: "Requests must come from this local CCO dashboard" }, 403);
+    }
     const url = new URL(req.url, `http://${req.headers.host}`);
 
     // SSE heartbeat endpoint — tracks connected browser tabs
@@ -1282,7 +1405,7 @@ export function startServer(port = 3847, maxRetries = 10) {
 
   let attempt = 0;
   function tryListen(p) {
-    server.listen(p, () => {
+    server.listen(p, "127.0.0.1", () => {
       console.log(`\nCross-Code Organizer (CCO) running at http://localhost:${p}\n`);
       console.log(`Made by a CS dropout with no mass, no team, no budget \u2014 just Claude Code and ADHD.`);
       console.log(`This is my first open-source project. If it helped you, a star would make my week:`);

@@ -17,6 +17,7 @@
  * @property {boolean} mcpPolicy
  * @property {boolean} mcpSecurity
  * @property {boolean} sessions
+ * @property {boolean} sessionDistill
  * @property {boolean} effective
  * @property {boolean} backup
  */
@@ -182,7 +183,7 @@
  */
 
 const REQUIRED_ADAPTER_STRINGS = ["id", "displayName", "shortName", "icon", "executable"];
-const REQUIRED_CAPABILITIES = ["contextBudget", "mcpControls", "mcpPolicy", "mcpSecurity", "sessions", "effective", "backup"];
+const REQUIRED_CAPABILITIES = ["contextBudget", "mcpControls", "mcpPolicy", "mcpSecurity", "sessions", "sessionDistill", "effective", "backup"];
 
 function assertCondition(condition, message) {
   if (!condition) throw new TypeError(`Invalid harness adapter: ${message}`);

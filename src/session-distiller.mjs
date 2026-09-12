@@ -1,330 +1,394 @@
 /**
- * Session Distiller — Extractive filtering for Claude Code sessions.
+ * Session Distiller — build a smaller, independent Claude Code transcript.
  *
- * 1. Backs up the original session (CC compact will destroy it)
- * 2. Distills a clean resumable session (conversation text verbatim)
- * 3. Writes an index MD pointing back to the backup for full tool results
- *
- * Zero information loss. Clean context for resume.
+ * The original JSONL is snapshotted verbatim. The new transcript keeps the
+ * conversation text, replaces tool protocol blocks with concise text, and
+ * points large results back to the snapshot. Its conversation records are
+ * re-chained with fresh UUIDs so Claude Code can actually resume the copy.
  */
 
-import { readFile, writeFile, copyFile, mkdir } from "node:fs/promises";
-import { join, dirname, basename } from "node:path";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 
-const PASSTHROUGH = new Set(["queue-operation", "last-prompt"]);
-const DROP = new Set(["file-history-snapshot", "attachment", "progress", "pr-link", "custom-title"]);
-const ENVELOPE_ONCE = new Set(["userType", "entrypoint", "version", "gitBranch", "slug", "permissionMode"]);
+const DROP_RECORD_TYPES = new Set([
+  "attachment",
+  "bridge-session",
+  "cost-state",
+  "custom-title",
+  "file-history-delta",
+  "file-history-snapshot",
+  "progress",
+  "pr-link",
+  "queue-operation",
+  "system",
+]);
 
-const toolIdMap = new Map();
+const GRAPH_FIELDS = [
+  "interruptedMessageId",
+  "logicalParentUuid",
+  "retractedMessageUuids",
+  "refusedUserMessageUuid",
+  "sourceToolAssistantUUID",
+  "sourceToolUseID",
+  "toolUseResult",
+];
 
-// Index entries — point back to backup
 const LARGE_THRESHOLD = 1500;
-let indexEntries = [];
-let currentOrigLine = 0;
 
-function addIndexEntry(toolName, label, chars) {
-  const id = indexEntries.length + 1;
-  indexEntries.push({ id, toolName, label, origLine: currentOrigLine, chars });
+function asText(value) {
+  if (typeof value === "string") return value;
+  if (value === undefined || value === null) return "";
+  try { return JSON.stringify(value); } catch { return String(value); }
+}
+
+function firstNonEmptyLine(text, fallback) {
+  return text.split("\n").find(line => line.trim())?.trim().slice(0, 80) || fallback;
+}
+
+function addIndexEntry(state, toolName, label, chars) {
+  const id = state.indexEntries.length + 1;
+  state.indexEntries.push({ id, toolName, label, origLine: state.origLine, chars });
   return id;
 }
 
-function distillBlocks(blocks) {
-  if (typeof blocks === "string") return blocks;
-  if (!Array.isArray(blocks)) return [];
+function toolHint(name, input) {
+  const inp = input && typeof input === "object" ? input : {};
 
-  const out = [];
-  for (const b of blocks) {
-    if (!b || typeof b !== "object") continue;
-    switch (b.type) {
-      case "text":
-        if (b.text?.trim()) out.push(b);
-        break;
+  if (name === "Edit") {
+    const oldText = asText(inp.old_string).slice(0, 200);
+    const newText = asText(inp.new_string).slice(0, 200);
+    return `${asText(inp.file_path)}\n  old: ${oldText}\n  new: ${newText}`.trim();
+  }
+  if (name === "Write") {
+    const content = asText(inp.content);
+    const lines = content.split("\n");
+    const preview = lines.length <= 10
+      ? content.slice(0, 400)
+      : [...lines.slice(0, 5), `... (${lines.length} lines)`, ...lines.slice(-3)].join("\n");
+    return `${asText(inp.file_path)}\n${preview.slice(0, 500)}`.trim();
+  }
+  if (name === "Read") {
+    let hint = asText(inp.file_path || inp.path);
+    if (inp.offset !== undefined) hint += `:${inp.offset}`;
+    if (inp.limit !== undefined) hint += `+${inp.limit}`;
+    return hint;
+  }
+  if (name === "Bash") return asText(inp.command).slice(0, 250);
+  if (name === "Grep") return `"${asText(inp.pattern)}" ${asText(inp.path)}`.trim();
+  if (name === "Glob") return asText(inp.pattern);
+  if (name === "Agent") return asText(inp.description || inp.prompt).slice(0, 250);
 
-      case "thinking":
-        if (b.thinking?.trim()) {
-          out.push({ type: "text", text: `[thinking: ${b.thinking.trim().slice(0, 200)}]` });
-        }
-        break;
+  return asText(
+    inp.file_path || inp.path || inp.command || inp.query || inp.prompt ||
+    inp.url || inp.skill || inp.selector || inp.text || inp.key || inp.description ||
+    (Array.isArray(inp.todos) ? `${inp.todos.length} items` : ""),
+  ).slice(0, 150);
+}
 
-      case "tool_use": {
-        const name = b.name || "tool";
-        if (b.id) toolIdMap.set(b.id, name);
-        const inp = b.input || {};
-        let hint = "";
+function toolResultText(block) {
+  if (typeof block.content === "string") return block.content;
+  if (!Array.isArray(block.content)) return "";
+  return block.content
+    .filter(part => part?.type === "text" && typeof part.text === "string")
+    .map(part => part.text)
+    .join("\n");
+}
 
-        if (name === "Edit") {
-          const old = inp.old_string?.slice(0, 200) || "";
-          const nw = inp.new_string?.slice(0, 200) || "";
-          hint = `${inp.file_path || ""}\n  old: ${old}\n  new: ${nw}`;
-        } else if (name === "Write") {
-          const content = inp.content || "";
-          const lines = content.split("\n");
-          const preview = lines.length <= 10 ? content.slice(0, 400)
-            : [...lines.slice(0, 5), `... (${lines.length} lines)`, ...lines.slice(-3)].join("\n");
-          hint = `${inp.file_path || ""}\n${preview.slice(0, 500)}`;
-        } else if (name === "Read") {
-          hint = inp.file_path || inp.path || "";
-          if (inp.offset) hint += `:${inp.offset}`;
-          if (inp.limit) hint += `+${inp.limit}`;
-        } else if (name === "Bash") {
-          hint = inp.command?.slice(0, 250) || "";
-        } else if (name === "Grep") {
-          hint = `"${inp.pattern || ""}" ${inp.path || ""}`;
-        } else if (name === "Glob") {
-          hint = inp.pattern || "";
-        } else if (name === "Agent") {
-          hint = inp.description || inp.prompt?.slice(0, 250) || "";
-        } else {
-          hint = inp.file_path || inp.path || inp.command?.slice(0, 150)
-            || inp.query?.slice(0, 120) || inp.prompt?.slice(0, 120)
-            || inp.url?.slice(0, 120) || inp.skill
-            || inp.selector?.slice(0, 100) || inp.text?.slice(0, 100)
-            || inp.key || inp.description?.slice(0, 120)
-            || (inp.todos ? `${inp.todos.length} items` : "")
-            || "";
-        }
-        out.push({ type: "text", text: hint ? `[${name}: ${hint}]` : `[${name}]` });
-        break;
+function distillBlocks(content, state) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return [];
+
+  const output = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+
+    if (block.type === "text") {
+      if (typeof block.text === "string" && block.text.trim()) output.push({ ...block });
+      continue;
+    }
+
+    if (block.type === "thinking") {
+      // Hidden reasoning is not user-visible conversation. Turning it into
+      // ordinary assistant text changes its meaning, so omit it.
+      continue;
+    }
+
+    if (block.type === "tool_use") {
+      const name = block.name || "tool";
+      if (block.id) state.toolNames.set(block.id, name);
+      const hint = toolHint(name, block.input);
+      output.push({ type: "text", text: hint ? `[${name}: ${hint}]` : `[${name}]` });
+      continue;
+    }
+
+    if (block.type === "tool_result") {
+      const toolName = state.toolNames.get(block.tool_use_id) || "unknown";
+      const raw = toolResultText(block);
+      const text = raw.trim();
+      if (!text) continue;
+
+      if (block.is_error) {
+        output.push({ type: "text", text: `[${toolName} error: ${text.slice(0, 500)}]` });
+        continue;
       }
 
-      case "tool_result": {
-        const toolName = toolIdMap.get(b.tool_use_id) || "unknown";
-        const raw = typeof b.content === "string" ? b.content
-          : Array.isArray(b.content) ? b.content.filter(c => c?.type === "text").map(c => c.text).join(" ")
-          : "";
-
-        if (b.is_error) {
-          if (raw) out.push({ type: "text", text: `[error: ${raw.slice(0, 500)}]` });
-          break;
-        }
-
-        const t = raw.trim();
-        if (!t) break;
-
-        // Large results → index reference to backup, keep preview
-        if (t.length > LARGE_THRESHOLD) {
-          const firstLine = t.split("\n").find(l => l.trim())?.trim().slice(0, 80) || toolName;
-          const id = addIndexEntry(toolName, firstLine, t.length);
-          const preview = toolName === "Bash"
-            ? [...t.split("\n").slice(0, 3), "...", ...t.split("\n").slice(-3)].join("\n")
-            : t.slice(0, 400);
-          out.push({ type: "text", text: `[${toolName} (${t.length} chars) → backup line ${currentOrigLine}, index #${id}:\n${preview}]` });
-          break;
-        }
-
-        // Small results — inline
-        if (toolName === "Read") {
-          out.push({ type: "text", text: `[read: ${t.split("\n").length} lines]` });
-        } else if (toolName === "Bash") {
-          const lines = t.split("\n");
-          if (lines.length <= 15) {
-            out.push({ type: "text", text: `[output: ${t.slice(0, 800)}]` });
-          } else {
-            const head = lines.slice(0, 5).join("\n");
-            const tail = lines.slice(-5).join("\n");
-            out.push({ type: "text", text: `[output (${lines.length} lines):\n${head}\n...\n${tail}]` });
-          }
-        } else if (toolName === "Grep") {
-          out.push({ type: "text", text: `[matches:\n${t.split("\n").slice(0, 25).join("\n")}]` });
-        } else if (toolName === "Glob") {
-          out.push({ type: "text", text: `[files:\n${t.split("\n").slice(0, 25).join("\n")}]` });
-        } else if (toolName === "Edit") {
-          out.push({ type: "text", text: `[edited ok]` });
-        } else if (toolName === "Write") {
-          out.push({ type: "text", text: `[written ok]` });
-        } else {
-          out.push({ type: "text", text: `[result: ${t.slice(0, 500)}]` });
-        }
-        break;
+      if (text.length > LARGE_THRESHOLD) {
+        const id = addIndexEntry(state, toolName, firstNonEmptyLine(text, toolName), text.length);
+        const lines = text.split("\n");
+        const preview = toolName === "Bash"
+          ? [...lines.slice(0, 3), "...", ...lines.slice(-3)].join("\n")
+          : text.slice(0, 400);
+        output.push({
+          type: "text",
+          text: `[${toolName} result (${text.length} chars) → backup line ${state.origLine}, index #${id}:\n${preview}]`,
+        });
+        continue;
       }
 
-      case "image":
-        out.push({ type: "text", text: "[image]" });
-        break;
+      if (toolName === "Read") {
+        output.push({ type: "text", text: `[read: ${text.split("\n").length} lines]` });
+      } else if (toolName === "Bash") {
+        const lines = text.split("\n");
+        const value = lines.length <= 15
+          ? text.slice(0, 800)
+          : `${lines.slice(0, 5).join("\n")}\n...\n${lines.slice(-5).join("\n")}`;
+        output.push({ type: "text", text: `[output${lines.length > 15 ? ` (${lines.length} lines)` : ""}: ${value}]` });
+      } else if (toolName === "Grep" || toolName === "Glob") {
+        output.push({ type: "text", text: `[${toolName === "Grep" ? "matches" : "files"}:\n${text.split("\n").slice(0, 25).join("\n")}]` });
+      } else if (toolName === "Edit" || toolName === "Write") {
+        output.push({ type: "text", text: `[${toolName.toLowerCase()} succeeded]` });
+      } else {
+        output.push({ type: "text", text: `[${toolName} result: ${text.slice(0, 500)}]` });
+      }
+      continue;
+    }
+
+    if (block.type === "image") {
+      output.push({ type: "text", text: "[image omitted; original retained in backup]" });
+      continue;
+    }
+
+    if (block.type === "fallback") {
+      output.push({ type: "text", text: "[model fallback occurred]" });
+      continue;
+    }
+
+    // Preserve text-bearing block types added by future Claude versions.
+    if (typeof block.text === "string" && block.text.trim()) {
+      output.push({ type: "text", text: block.text });
+    } else {
+      state.unsupportedBlockTypes.add(block.type || "unknown");
     }
   }
 
-  const merged = [];
-  for (const b of out) {
-    const prev = merged[merged.length - 1];
-    if (b.type === "text" && prev?.type === "text") prev.text += "\n" + b.text;
-    else merged.push({ ...b });
-  }
-  return merged;
+  return output;
 }
 
-function stripEnvelope(entry, seenEnvelope) {
-  const cleaned = { ...entry };
-  for (const field of ENVELOPE_ONCE) {
-    if (field in cleaned) {
-      if (seenEnvelope.has(field)) delete cleaned[field];
-      else seenEnvelope.add(field);
+function cleanConversationRecord(entry, content, sessionId) {
+  const clean = { ...entry };
+  for (const field of GRAPH_FIELDS) delete clean[field];
+  delete clean.isCompactSummary;
+  delete clean.compactMetadata;
+  clean.sessionId = sessionId;
+  clean.session_id = sessionId;
+  clean.isSidechain = false;
+  clean.type = entry.message.role;
+
+  const message = { ...entry.message, content };
+  delete message.usage;
+  delete message.diagnostics;
+  delete message.context_management;
+  delete message.container;
+  clean.message = message;
+  return clean;
+}
+
+function appendMetadata(record, backupPath, indexPath, hasIndex) {
+  const note = [
+    "[DISTILLED SESSION METADATA]",
+    `Full-fidelity transcript backup: ${backupPath}`,
+    hasIndex ? `Large tool-result index: ${indexPath}` : "No large tool results were indexed.",
+    "Read the backup only when an omitted detail is relevant.",
+  ].join("\n");
+
+  const content = record.message.content;
+  record.message.content = typeof content === "string"
+    ? [{ type: "text", text: content }, { type: "text", text: note }]
+    : [...content, { type: "text", text: note }];
+}
+
+function markdownCell(value) {
+  return String(value).replace(/\r?\n/g, " ").replace(/\|/g, "\\|");
+}
+
+function buildIndex({ backupPath, outputPath, inputPath, entries }) {
+  const lines = [
+    "# Distilled Session Index",
+    "",
+    `Backup: ${backupPath}`,
+    `Distilled: ${outputPath}`,
+    `Original: ${inputPath}`,
+    `Large results: ${entries.length}`,
+    "",
+    "The line numbers below refer to the immutable backup snapshot.",
+    "",
+    "| # | Tool | Description | Backup line | Size |",
+    "|---|------|-------------|-------------|------|",
+  ];
+  for (const entry of entries) {
+    lines.push(`| ${entry.id} | ${markdownCell(entry.toolName)} | ${markdownCell(entry.label)} | ${entry.origLine} | ${(entry.chars / 1024).toFixed(1)}K |`);
+  }
+  return lines.join("\n") + "\n";
+}
+
+function extractTitle(records) {
+  for (const { entry } of records) {
+    if (entry.type === "ai-title" && typeof entry.aiTitle === "string" && entry.aiTitle.trim()) {
+      return entry.aiTitle.replace(/^\[distilled[^\]]*\]\s*/i, "").trim();
     }
   }
-  return cleaned;
+  for (const { entry } of records) {
+    if (
+      (entry.type !== "user" && !(entry.type === "message" && entry.message?.role === "user")) ||
+      !entry.message?.content || entry.isMeta || entry.isCompactSummary
+    ) continue;
+    const content = entry.message.content;
+    let text = typeof content === "string"
+      ? content
+      : Array.isArray(content)
+        ? content.filter(block => block?.type === "text").map(block => block.text).join(" ")
+        : "";
+    text = text.replace(/<[^>]+>[^<]*<\/[^>]+>/g, "").replace(/<[^>]+>/g, "").trim();
+    if (text && !text.startsWith("[") && text.length > 5) return text.slice(0, 80);
+  }
+  return "Untitled session";
 }
 
-// ── Main ────────────────────────────────────────────────────────────────
+async function pathExists(path) {
+  try { await access(path); return true; } catch { return false; }
+}
 
 export async function distillSession(inputPath, opts = {}) {
   const { outputDir, sessionId, dryRun = false } = opts;
   const raw = await readFile(inputPath, "utf-8");
   const rawLines = raw.split("\n");
-  const lines = rawLines.filter(l => l.trim());
+  const records = [];
+
+  for (let index = 0; index < rawLines.length; index++) {
+    if (!rawLines[index].trim()) continue;
+    try {
+      records.push({ entry: JSON.parse(rawLines[index]), line: index + 1 });
+    } catch (error) {
+      throw new Error(`Malformed session JSONL at line ${index + 1}: ${error.message}`);
+    }
+  }
+  if (records.length === 0) throw new Error("Session is empty");
+
   const newId = sessionId || randomUUID();
   const dir = outputDir || dirname(inputPath);
   const outputPath = join(dir, `${newId}.jsonl`);
-  const distillDir = join(dir, `${newId}`);    // folder for related files
+  if (resolve(outputPath) === resolve(inputPath)) throw new Error("Distilled session cannot overwrite its source");
+
+  const distillDir = join(dir, newId);
   const backupPath = join(distillDir, `backup-${basename(inputPath)}`);
-  const indexPath = join(distillDir, `index.md`);
-
-  let kept = 0, dropped = 0;
+  const indexPath = join(distillDir, "index.md");
+  const state = {
+    indexEntries: [],
+    origLine: 0,
+    toolNames: new Map(),
+    unsupportedBlockTypes: new Set(),
+  };
   const byType = {};
-  const out = [];
-  let titleRaw = "";
-  const seenEnvelope = new Set();
+  const conversation = [];
+  let keptSourceRecords = 0;
 
-  toolIdMap.clear();
-  indexEntries = [];
-
-  // Pre-scan for title
-  for (const line of lines) {
-    try {
-      const e = JSON.parse(line);
-      if (e.type === "ai-title") { titleRaw = e.aiTitle || ""; break; }
-      if (!titleRaw && e.type === "user" && e.message?.content) {
-        const c = e.message.content;
-        let t = typeof c === "string" ? c : Array.isArray(c)
-          ? c.filter(b => b?.type === "text").map(b => b.text).join(" ") : "";
-        // Strip XML tags (ide_opened_file, system-reminder, etc.) before using as title
-        t = t.replace(/<[^>]+>[^<]*<\/[^>]+>/g, "").replace(/<[^>]+>/g, "").trim();
-        if (t && !t.startsWith("[") && t.length > 5) titleRaw = t.slice(0, 80);
-      }
-    } catch {}
-  }
-
-  // Main loop
-  let origLineIdx = 0;
-  for (const line of lines) {
-    while (origLineIdx < rawLines.length && rawLines[origLineIdx].trim() !== line.trim()) origLineIdx++;
-    currentOrigLine = origLineIdx + 1;
-
-    let e;
-    try { e = JSON.parse(line); } catch { origLineIdx++; continue; }
-
-    const type = e.type || "unknown";
+  for (const { entry, line } of records) {
+    const type = entry.type || "unknown";
     byType[type] = (byType[type] || 0) + 1;
+    state.origLine = line;
 
-    if (DROP.has(type)) { dropped++; origLineIdx++; continue; }
-    if (type === "ai-title") { dropped++; origLineIdx++; continue; }
+    if (DROP_RECORD_TYPES.has(type) || type === "ai-title") continue;
+    const role = entry.message?.role;
+    if (!["user", "assistant"].includes(role)) continue;
+    if (![role, "message"].includes(type)) continue;
+    // Compact summaries duplicate conversation still present in the JSONL.
+    if (entry.isCompactSummary) continue;
+    if (!entry.message || !("content" in entry.message)) continue;
 
-    e = stripEnvelope(e, seenEnvelope);
+    const content = distillBlocks(entry.message.content, state);
+    if (typeof content === "string" ? !content.trim() : content.length === 0) continue;
 
-    if (PASSTHROUGH.has(type)) {
-      out.push(JSON.stringify({ ...e, sessionId: newId }));
-      kept++; origLineIdx++; continue;
+    const clean = cleanConversationRecord(entry, content, newId);
+    const previous = conversation.at(-1);
+    if (
+      clean.type === "assistant" && previous?.type === "assistant" &&
+      clean.message?.id && clean.message.id === previous.message?.id &&
+      Array.isArray(clean.message.content) && Array.isArray(previous.message.content)
+    ) {
+      previous.message.content.push(...clean.message.content);
+    } else {
+      conversation.push(clean);
     }
-
-    if (type === "system") {
-      if (e.subtype === "compact_boundary") {
-        out.push(JSON.stringify({ ...e, sessionId: newId }));
-        kept++;
-      } else { dropped++; }
-      origLineIdx++; continue;
-    }
-
-    if ((type === "user" || type === "assistant") && e.message?.content) {
-      const content = distillBlocks(e.message.content);
-      if (Array.isArray(content) && content.length === 0) { dropped++; origLineIdx++; continue; }
-      const msg = { ...e.message, content };
-      delete msg.usage;
-      out.push(JSON.stringify({ ...e, sessionId: newId, message: msg }));
-      kept++; origLineIdx++; continue;
-    }
-
-    dropped++;
-    origLineIdx++;
+    keptSourceRecords++;
   }
 
-  // Title with index info
-  const inBytes = Buffer.byteLength(raw, "utf-8");
-  const tempStr = out.join("\n");
-  const pct = Math.round((1 - Buffer.byteLength(tempStr, "utf-8") / inBytes) * 100);
-  const hasIndex = indexEntries.length > 0;
-  const titleLine = JSON.stringify({
-    type: "ai-title", sessionId: newId,
-    aiTitle: `[distilled -${pct}%] ${titleRaw || "Untitled session"}`,
-  });
-  kept++;
+  if (conversation.length === 0) throw new Error("Session has no resumable conversation messages");
 
-  let insertIdx = 0;
-  for (let i = 0; i < out.length; i++) {
-    try {
-      const o = JSON.parse(out[i]);
-      if (o.type === "queue-operation") { insertIdx = i + 1; continue; }
-    } catch {}
-    break;
-  }
-  out.splice(insertIdx, 0, titleLine);
-
-  // Inject context message right after title — tells Claude about the backup + index
-  if (hasIndex) {
-    const contextMsg = JSON.stringify({
-      type: "user", sessionId: newId,
-      message: {
-        role: "user",
-        content: [{
-          type: "text",
-          text: [
-            `[DISTILLED SESSION]`,
-            `This session has been distilled. Large tool results were stripped but backed up.`,
-            `When you see "→ backup line N, index #X", the full content is at:`,
-            `  ${backupPath}`,
-            `Use: Read ${backupPath} offset=<line> limit=50`,
-            `Full index: ${indexPath}`,
-          ].join("\n"),
-        }],
-      },
-    });
-    out.splice(insertIdx + 1, 0, contextMsg);
-    kept++;
+  // Claude Code reconstructs resume history by walking parentUuid from the
+  // leaf. Build a fresh linear graph so dropped metadata cannot break it.
+  let parentUuid = null;
+  for (const record of conversation) {
+    record.parentUuid = parentUuid;
+    record.uuid = randomUUID();
+    parentUuid = record.uuid;
   }
 
-  const outputStr = out.join("\n") + "\n";
-  const outBytes = Buffer.byteLength(outputStr, "utf-8");
+  const hasIndex = state.indexEntries.length > 0;
+  appendMetadata(conversation.at(-1), backupPath, indexPath, hasIndex);
+
+  const lastPromptSource = [...records].reverse().find(({ entry }) => entry.type === "last-prompt")?.entry;
+  const lastPrompt = lastPromptSource ? {
+    ...lastPromptSource,
+    type: "last-prompt",
+    sessionId: newId,
+    leafUuid: parentUuid,
+  } : null;
+  if (lastPrompt && "session_id" in lastPrompt) lastPrompt.session_id = newId;
+
+  const body = [...conversation, ...(lastPrompt ? [lastPrompt] : [])];
+  const inputBytes = Buffer.byteLength(raw, "utf-8");
+  const bodyString = body.map(record => JSON.stringify(record)).join("\n") + "\n";
+  const initialReduction = Math.round((1 - Buffer.byteLength(bodyString, "utf-8") / inputBytes) * 100);
+  const title = {
+    type: "ai-title",
+    sessionId: newId,
+    aiTitle: `[distilled -${Math.max(0, initialReduction)}%] ${extractTitle(records)}`,
+  };
+  const outputRecords = [title, ...body];
+  const outputString = outputRecords.map(record => JSON.stringify(record)).join("\n") + "\n";
+  const outputBytes = Buffer.byteLength(outputString, "utf-8");
+  const reduction = Math.round((1 - outputBytes / inputBytes) * 100);
 
   if (!dryRun) {
-    // 1. Backup original into distill folder (before CC compact can destroy it)
-    await mkdir(distillDir, { recursive: true });
-    await copyFile(inputPath, backupPath);
-
-    // 2. Write distilled session
-    await writeFile(outputPath, outputStr, "utf-8");
-
-    // 3. Write index pointing to backup
-    if (hasIndex) {
-      const idx = [];
-      idx.push(`# Distilled Session Index`);
-      idx.push(``);
-      idx.push(`Backup: ${backupPath}`);
-      idx.push(`Distilled: ${outputPath}`);
-      idx.push(`Original: ${inputPath}`);
-      idx.push(`Large results: ${indexEntries.length}`);
-      idx.push(``);
-      idx.push(`To read any full result:`);
-      idx.push("```");
-      idx.push(`Read ${backupPath} offset=<line> limit=50`);
-      idx.push("```");
-      idx.push(``);
-      idx.push(`| # | Tool | Description | Line | Size |`);
-      idx.push(`|---|------|-------------|------|------|`);
-      for (const e of indexEntries) {
-        idx.push(`| ${e.id} | ${e.toolName} | ${e.label} | ${e.origLine} | ${(e.chars / 1024).toFixed(1)}K |`);
-      }
-      idx.push(``);
-      await writeFile(indexPath, idx.join("\n") + "\n", "utf-8");
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+    if (await pathExists(outputPath) || await pathExists(distillDir)) {
+      throw new Error(`Distilled session already exists: ${newId}`);
     }
+    await mkdir(distillDir, { mode: 0o700 });
+    // Snapshot the exact bytes that the index references, even if the source is active.
+    await writeFile(backupPath, raw, { encoding: "utf-8", mode: 0o600, flag: "wx" });
+    if (hasIndex) {
+      await writeFile(indexPath, buildIndex({
+        backupPath,
+        outputPath,
+        inputPath,
+        entries: state.indexEntries,
+      }), { encoding: "utf-8", mode: 0o600, flag: "wx" });
+    }
+    // Publish the visible session only after all recovery files exist.
+    await writeFile(outputPath, outputString, { encoding: "utf-8", mode: 0o600, flag: "wx" });
   }
 
   return {
@@ -333,44 +397,51 @@ export async function distillSession(inputPath, opts = {}) {
     backupPath: dryRun ? "(dry run)" : backupPath,
     sessionId: newId,
     stats: {
-      inputLines: lines.length, keptLines: kept, droppedLines: dropped,
-      inputBytes: inBytes, outputBytes: outBytes,
-      backupBytes: inBytes,
-      reduction: Math.round((1 - outBytes / inBytes) * 100) + "%",
-      indexEntries: indexEntries.length,
+      inputLines: records.length,
+      keptLines: outputRecords.length,
+      droppedLines: records.length - keptSourceRecords,
+      inputBytes,
+      outputBytes,
+      backupBytes: inputBytes,
+      reduction: `${reduction}%`,
+      indexEntries: state.indexEntries.length,
       indexPath: hasIndex ? indexPath : null,
+      unsupportedBlockTypes: [...state.unsupportedBlockTypes].sort(),
       byType,
     },
   };
 }
 
-// ── CLI ─────────────────────────────────────────────────────────────────
-
-if (process.argv[1]?.endsWith("session-distiller.mjs")) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const dryRun = args.includes("--dry-run");
-  const inputPath = args.find(a => !a.startsWith("--"));
+  const inputPath = args.find(arg => !arg.startsWith("--"));
 
   if (!inputPath) {
     console.error("Usage: node session-distiller.mjs <session.jsonl> [--dry-run]");
     process.exit(1);
   }
 
-  const fmt = b => b < 1024 ? b + "B" : b < 1048576 ? (b / 1024).toFixed(1) + "K" : (b / 1048576).toFixed(1) + "M";
+  const formatBytes = bytes => bytes < 1024
+    ? `${bytes}B`
+    : bytes < 1048576
+      ? `${(bytes / 1024).toFixed(1)}K`
+      : `${(bytes / 1048576).toFixed(1)}M`;
 
   try {
-    const r = await distillSession(inputPath, { dryRun });
-    const s = r.stats;
-    console.log(`\nSession Distiller\n─────────────────`);
-    console.log(`Backup:    ${r.backupPath} (${fmt(s.backupBytes)})`);
-    console.log(`Distilled: ${r.outputPath} (${fmt(s.outputBytes)}, ${s.reduction} reduction)`);
-    if (s.indexEntries > 0) {
-      console.log(`Index:     ${s.indexPath} (${s.indexEntries} refs)`);
+    const result = await distillSession(inputPath, { dryRun });
+    const stats = result.stats;
+    console.log("\nSession Distiller\n─────────────────");
+    console.log(`Backup:    ${result.backupPath} (${formatBytes(stats.backupBytes)})`);
+    console.log(`Distilled: ${result.outputPath} (${formatBytes(stats.outputBytes)}, ${stats.reduction} reduction)`);
+    if (stats.indexEntries > 0) console.log(`Index:     ${stats.indexPath} (${stats.indexEntries} refs)`);
+    console.log(`Lines:     ${stats.inputLines} → ${stats.keptLines}`);
+    if (stats.unsupportedBlockTypes.length > 0) {
+      console.log(`Unsupported blocks: ${stats.unsupportedBlockTypes.join(", ")}`);
     }
-    console.log(`Lines:     ${s.inputLines} → ${s.keptLines}`);
-    console.log("\nTypes:", Object.entries(s.byType).sort((a, b) => b[1] - a[1]).map(([t, c]) => `${t}:${c}`).join("  "));
-  } catch (err) {
-    console.error(`Error: ${err.message}`);
+    console.log("\nTypes:", Object.entries(stats.byType).sort((a, b) => b[1] - a[1]).map(([type, count]) => `${type}:${count}`).join("  "));
+  } catch (error) {
+    console.error(`Error: ${error.message}`);
     process.exit(1);
   }
 }

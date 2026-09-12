@@ -1,7 +1,7 @@
 {
   "name": "cross-code-organizer",
-  "version": "0.2.5",
-  "description": "Organize all your Claude Code memories, skills, MCP servers, and hooks — see what loads globally vs per-project, then move items between scopes",
+  "version": "0.20.0",
+  "description": "Inspect and organize Claude Code memories, skills, MCP servers, hooks, and project context from a local dashboard",
   "author": {
     "name": "ithiria894",
     "url": "https://github.com/ithiria894"

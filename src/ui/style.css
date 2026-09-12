@@ -789,6 +789,29 @@ body {
   white-space: normal;
   padding: 0;
 }
+.d-inline-editor {
+  display: flex;
+  flex: 1;
+  min-height: 180px;
+  flex-direction: column;
+  gap: 8px;
+}
+.d-inline-editor textarea {
+  flex: 1;
+  min-height: 180px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-inset);
+  color: var(--text-primary);
+  padding: 14px 16px;
+  font: 0.75rem/1.65 "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  outline: none;
+}
+.d-inline-editor textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }
+.d-inline-editor-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.d-inline-editor-hint { margin-right: auto; color: var(--text-faint); font-size: 0.68rem; }
+.d-btn-save { background: var(--accent); color: white; border-color: var(--accent); }
 .syntax-preview {
   margin: 0;
   min-height: 100%;

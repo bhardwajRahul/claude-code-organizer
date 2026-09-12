@@ -132,6 +132,14 @@
 
         <div class="d-field d-field-preview">
           <div class="d-preview" id="previewContent">Select an item to preview</div>
+          <div class="d-inline-editor hidden" id="inlineEditor">
+            <textarea id="inlineEditorContent" spellcheck="false" aria-label="Markdown content"></textarea>
+            <div class="d-inline-editor-actions">
+              <span class="d-inline-editor-hint">Edits the complete Markdown file</span>
+              <button class="d-btn" id="inlineEditorCancel" type="button">Cancel</button>
+              <button class="d-btn d-btn-save" id="inlineEditorSave" type="button">Save</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -140,6 +148,7 @@
         <div class="cc-btn-row" id="ccBtnRow"></div>
       </div>
       <div class="detail-footer">
+        <button class="d-btn d-btn-edit" id="detailEdit" type="button">Edit here</button>
         <button class="d-btn d-btn-open" id="detailOpen" type="button">Open in Editor</button>
         <button class="d-btn d-btn-move" id="detailMove" type="button">Move to...</button>
         <button class="d-btn d-btn-del" id="detailDelete" type="button">Delete</button>

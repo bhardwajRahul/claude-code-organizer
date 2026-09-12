@@ -7,7 +7,7 @@
  */
 
 import { readdir, stat, readFile, access, open } from "node:fs/promises";
-import { join, basename } from "node:path";
+import { join, basename, resolve } from "node:path";
 import { homedir, platform } from "node:os";
 import { EFFECTIVE_RULES } from "../../effective.mjs";
 import { scanHarness } from "../scanner-framework.mjs";
@@ -607,6 +607,7 @@ async function scanSkills(scope) {
       ctime: s ? s.birthtime.toISOString().slice(0, 16) : "",
       path: skillDir,
       bundle: pluginName || bundleInfo?.source || null,
+      locked: Boolean(pluginName),
     };
   }
 
@@ -1530,6 +1531,7 @@ const capabilities = {
   mcpPolicy: true,
   mcpSecurity: true,
   sessions: true,
+  sessionDistill: true,
   effective: true,
   backup: true,
 };
@@ -1565,11 +1567,14 @@ export const claudeAdapter = {
   getPaths(ctx) {
     const home = ctx?.home || HOME;
     const managedDir = managedDirForPlatform(ctx?.platform || RUNTIME_PLATFORM);
+    const customPlansDir = _settingsCache?.plansDirectory
+      ? resolve(process.cwd(), _settingsCache.plansDirectory)
+      : null;
 
     return {
       rootDir: join(home, ".claude"),
       backupDir: join(home, ".claude-backups"),
-      safeRoots: [home, join(home, ".claude"), managedDir],
+      safeRoots: [join(home, ".claude"), join(home, ".claude.json"), join(home, ".mcp.json"), managedDir, customPlansDir].filter(Boolean),
     };
   },
   discoverScopes,

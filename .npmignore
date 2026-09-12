@@ -2,6 +2,10 @@
 .mcpregistry_registry_token
 mcp-publisher
 *.tgz
+src/session-distiller-v2.mjs
+src/session-distiller-v3.mjs
+src/session-distiller-v4.mjs
+src/session-distiller-v5.mjs
 PLAN.md
 SHIP.md
 docs/

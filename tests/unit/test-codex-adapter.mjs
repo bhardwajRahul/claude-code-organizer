@@ -15,6 +15,7 @@ async function createCodexHome() {
   await mkdir(join(codexDir, 'skills', 'demo-skill'), { recursive: true });
   await mkdir(join(codexDir, 'skills', '.system', 'system-skill'), { recursive: true });
   await mkdir(join(codexDir, 'rules'), { recursive: true });
+  await mkdir(join(codexDir, 'hooks'), { recursive: true });
   await mkdir(join(codexDir, 'plugins', 'cache', 'openai-curated', 'github', 'abc123', '.codex-plugin'), { recursive: true });
 
   await writeFile(join(codexDir, 'config.toml'), `
@@ -53,6 +54,7 @@ Nested system skill layout.
 `);
 
   await writeFile(join(codexDir, 'rules', 'default.rules'), 'always respond with concise engineering notes\n');
+  await writeFile(join(codexDir, 'hooks', 'validate.py'), 'print("validate")\n');
 
   await writeFile(join(codexDir, 'plugins', 'cache', 'openai-curated', 'github', 'abc123', '.codex-plugin', 'plugin.json'), JSON.stringify({
     name: 'github',
@@ -142,6 +144,7 @@ describe('Codex adapter', () => {
       assert.strictEqual(result.counts.profile, 1);
       assert.strictEqual(result.counts.rule, 1);
       assert.strictEqual(result.counts.plugin, 1);
+      assert.strictEqual(result.counts.hook, 1);
 
       assert.ok(result.items.some(item => item.category === 'config' && item.name === 'config.toml'));
       assert.ok(result.items.some(item => item.category === 'memory' && item.name === 'Project Memory'));
@@ -152,6 +155,10 @@ describe('Codex adapter', () => {
       assert.ok(result.items.some(item => item.category === 'profile' && item.name === 'review'));
       assert.ok(result.items.some(item => item.category === 'rule' && item.name === 'default.rules'));
       assert.ok(result.items.some(item => item.category === 'plugin' && item.name === 'github'));
+      assert.ok(result.items.some(item => item.category === 'hook' && item.name === 'validate.py'));
+      assert.strictEqual(result.items.find(item => item.category === 'skill' && item.name === 'demo-skill').locked, false);
+      assert.strictEqual(result.items.find(item => item.category === 'skill' && item.name === '.system/system-skill').locked, true);
+      assert.strictEqual(result.items.find(item => item.category === 'plugin' && item.name === 'github').locked, true);
     } finally {
       await env.cleanup();
     }

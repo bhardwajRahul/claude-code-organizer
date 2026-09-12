@@ -29,7 +29,12 @@ Screenshot*.png
 docs/screenshot.png
 PLAN.md
 SHIP.md
-tests/
+# Keep generated/ad-hoc test files local, while allowing maintained unit tests.
+tests/*
+!tests/unit/
+tests/unit/*
+!tests/unit/test-opencode-adapter.mjs
+!tests/unit/test-session-distiller.mjs
 test-results/
 
 # Cloned reference datasets (too large to push, download separately)

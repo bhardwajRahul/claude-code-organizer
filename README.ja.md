@@ -8,7 +8,7 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-314%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-345%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
 [![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [廣東話](README.zh-HK.md) | 日本語 | [한국어](README.ko.md) | [Español](README.es.md) | [Bahasa Indonesia](README.id.md) | [Italiano](README.it.md) | [Português](README.pt-BR.md) | [Türkçe](README.tr.md) | [Tiếng Việt](README.vi.md) | [ไทย](README.th.md)
@@ -27,7 +27,7 @@ CCO は Claude Code の memories、skills、agents、hooks、context budget と�
 
 ![Cross-Code Organizer (CCO) Demo](docs/demo.gif)
 
-<sub>314 tests（113 unit + 201 E2E） | Zero telemetry | デモは AI が [Pagecast](https://github.com/mcpware/pagecast) で録画</sub>
+<sub>345 tests（137 unit + 208 E2E） | Zero telemetry | デモは AI が [Pagecast](https://github.com/mcpware/pagecast) で録画</sub>
 
 > 5日で100 star 超え。CSを中退したエンジニアが、Claude の裏側で動いてる140個の設定ファイルを見つけて、「これ全部 `cat` で開くのはさすがにしんどい」と思って作った。初 OSS です。star、テスト、issue 報告してくれた方々、ほんとうにありがとうございます。
 

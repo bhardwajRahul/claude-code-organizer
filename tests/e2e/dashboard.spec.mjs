@@ -570,6 +570,48 @@ test.describe('API Layer', () => {
     }
   });
 
+  test('session distiller is rejected for non-Claude harnesses', async ({ request }) => {
+    const res = await request.post(`${env.baseURL}/api/session-distill?harness=codex&path=${encodeURIComponent('/tmp/not-a-codex-session.jsonl')}`);
+    expect(res.status()).toBe(400);
+    const data = await res.json();
+    expect(data.ok).toBe(false);
+    expect(data.unavailable).toBe(true);
+    expect(data.harnessId).toBe('codex');
+    expect(data.feature).toBe('Session Distiller');
+  });
+
+  test('session distiller API creates a chained copy and rejects recursive distillation', async ({ request }) => {
+    const scan = await (await request.get(`${env.baseURL}/api/scan`)).json();
+    const source = scan.items.find(i => i.category === 'session' && i.name === 'Refactor auth to OAuth2');
+    const sourceBefore = await readFile(source.path, 'utf-8');
+
+    const res = await request.post(
+      `${env.baseURL}/api/session-distill?path=${encodeURIComponent(source.path)}`,
+    );
+    expect(res.status()).toBe(200);
+    const data = await res.json();
+    expect(data.ok).toBe(true);
+    expect(await readFile(source.path, 'utf-8')).toBe(sourceBefore);
+    expect(await readFile(data.backup, 'utf-8')).toBe(sourceBefore);
+
+    const output = (await readFile(data.distilled, 'utf-8')).trim().split('\n').map(JSON.parse);
+    const conversation = output.filter(row => row.type === 'user' || row.type === 'assistant');
+    expect(conversation).toHaveLength(4);
+    for (let index = 0; index < conversation.length; index++) {
+      expect(conversation[index].sessionId).toBe(data.sessionId);
+      expect(conversation[index].session_id).toBe(data.sessionId);
+      expect(conversation[index].parentUuid).toBe(index === 0 ? null : conversation[index - 1].uuid);
+    }
+
+    const refreshed = await (await request.get(`${env.baseURL}/api/scan`)).json();
+    const distilled = refreshed.items.find(i => i.path === data.distilled);
+    expect(distilled.name).toMatch(/^\[distilled/);
+    const retry = await request.post(
+      `${env.baseURL}/api/session-distill?path=${encodeURIComponent(distilled.path)}`,
+    );
+    expect(retry.status()).toBe(400);
+  });
+
   test('session preview shows conversation via /api/session-preview', async () => {
     const { items } = await (await fetch(`${env.baseURL}/api/scan`)).json();
     const session = items.find(i => i.category === 'session' && i.name === 'Refactor auth to OAuth2');
@@ -727,6 +769,39 @@ test.describe('API Layer', () => {
     const res = await fetch(`${env.baseURL}/api/file-content?path=/nonexistent/file.md`);
     const data = await res.json();
     expect(data.ok).toBe(false);
+  });
+
+  test('POST /api/save-markdown updates a scanned memory but rejects an arbitrary HOME file', async () => {
+    const { items } = await (await fetch(`${env.baseURL}/api/scan`)).json();
+    const mem = items.find(i => i.name === 'user_prefs');
+    const original = await readFile(mem.path, 'utf-8');
+    const updated = '# Updated memory\n\nUse TypeScript everywhere.\n';
+
+    const save = await fetch(`${env.baseURL}/api/save-markdown`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: mem.path, content: updated, expectedContent: original }),
+    });
+    expect(save.status).toBe(200);
+    expect(await readFile(mem.path, 'utf-8')).toBe(updated);
+
+    const staleSave = await fetch(`${env.baseURL}/api/save-markdown`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: mem.path, content: 'stale overwrite', expectedContent: original }),
+    });
+    expect(staleSave.status).toBe(409);
+    expect(await readFile(mem.path, 'utf-8')).toBe(updated);
+
+    const unrelated = join(env.tmpDir, 'unrelated.md');
+    await writeFile(unrelated, 'private');
+    const rejected = await fetch(`${env.baseURL}/api/save-markdown`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: unrelated, content: 'overwritten' }),
+    });
+    expect(rejected.status).toBe(400);
+    expect(await readFile(unrelated, 'utf-8')).toBe('private');
   });
 
   test('POST /api/move memory + verify filesystem', async () => {
@@ -1124,6 +1199,41 @@ test.describe('UI Rendering', () => {
       await expect(page.locator('#previewContent')).toContainText(expected);
       await expect(page.locator('#previewContent')).not.toContainText('Failed to load preview');
     }
+  });
+
+  test('detail panel edits a memory in place', async ({ page }) => {
+    await page.goto(env.baseURL);
+    await page.waitForSelector('#loading', { state: 'hidden' });
+    await page.locator('.s-scope-hdr[data-scope-id="global"] .s-nm').click();
+    await page.locator('.item', { hasText: 'user_prefs' }).click();
+
+    await expect(page.locator('#detailEdit')).toBeVisible();
+    await page.locator('#detailEdit').click();
+    await page.locator('#inlineEditorContent').fill('# My memory\n\nPrefer ESM modules.');
+    await page.locator('#inlineEditorSave').click();
+
+    await expect(page.locator('#previewContent')).toContainText('Prefer ESM modules.');
+    expect(await readFile(join(env.dirs.globalMem, 'user_prefs.md'), 'utf-8')).toContain('Prefer ESM modules.');
+  });
+
+  test('serializes rapid frontmatter edits to the same skill', async ({ page }) => {
+    await page.route('**/api/save-frontmatter', async route => {
+      await new Promise(resolveDelay => setTimeout(resolveDelay, 900));
+      await route.continue();
+    });
+    await page.goto(env.baseURL);
+    await page.waitForSelector('#loading', { state: 'hidden' });
+    await page.locator('.s-scope-hdr[data-scope-id="global"] .s-nm').click();
+    await page.locator('.item', { hasText: 'deploy' }).first().click();
+
+    await page.locator('[data-fm-key="model"]').selectOption('haiku');
+    await page.locator('[data-fm-key="when_to_use"]').fill('Use for production releases');
+
+    await expect.poll(async () => readFile(join(env.dirs.globalSkills, 'deploy', 'SKILL.md'), 'utf-8'), {
+      timeout: 5000,
+    }).toContain('when_to_use: Use for production releases');
+    const content = await readFile(join(env.dirs.globalSkills, 'deploy', 'SKILL.md'), 'utf-8');
+    expect(content).toContain('model: haiku');
   });
 
   test('move modal shows full scope hierarchy with current scope marked', async ({ page }) => {
@@ -1869,6 +1979,28 @@ test.describe('Security — malformed input', () => {
       body: 'this is not json{{{',
     });
     expect(res.status).toBe(400);
+  });
+
+  test('rejects cross-site mutation requests', async () => {
+    const res = await fetch(`${env.baseURL}/api/delete`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Origin': 'https://evil.example',
+        'Sec-Fetch-Site': 'cross-site',
+      },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test('rejects oversized request bodies', async () => {
+    const res = await fetch(`${env.baseURL}/api/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ padding: 'x'.repeat(1024 * 1024 + 1) }),
+    });
+    expect(res.status).toBe(413);
   });
 
   test('POST /api/delete with invalid JSON returns 400', async () => {

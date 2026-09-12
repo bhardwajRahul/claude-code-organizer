@@ -20,6 +20,21 @@
 
 ## Backend domains
 
+### Harness adapter framework
+- Contract: `src/harness/interface.mjs`
+- Registry: `src/harness/registry.mjs`
+- Shared scanner helpers: `src/harness/scanner-framework.mjs`
+- Adapters:
+  - Claude Code — `src/harness/adapters/claude.mjs`
+  - Codex CLI — `src/harness/adapters/codex.mjs`
+  - OpenCode — `src/harness/adapters/opencode.mjs`
+- Search: `validateAdapter`, `registerAdapter`, `listAdapters`, `scanHarness`
+- Tests: `tests/unit/test-codex-adapter.mjs`, `tests/unit/test-opencode-adapter.mjs`
+- Connects to:
+  - Server — selects one adapter per request and exposes its capabilities
+  - Scanner — adapter scanners return the shared inventory shape
+  - Frontend — harness selector and capability-gated actions
+
 ### Scanner (discovery engine)
 - Entry: `src/scanner.mjs`
 - Search: `scanAll`, `scanScope`, `discoverProjects`, `CATEGORIES`
@@ -47,7 +62,7 @@
 
 ### HTTP server
 - Entry: `src/server.mjs`
-- Search: `createServer`, `/api/scan`, `/api/move`, `/api/delete`, `/api/context-budget`, `/api/security-scan`, `/api/file-content`, `/api/session-preview`, `/api/export`
+- Search: `createServer`, `/api/scan`, `/api/move`, `/api/delete`, `/api/save-markdown`, `/api/context-budget`, `/api/security-scan`, `/api/file-content`, `/api/session-preview`, `/api/export`
 - Tests: `tests/e2e/dashboard.spec.mjs`
 - Connects to:
   - Scanner — inventory via `scanAll()`
@@ -110,12 +125,12 @@
 - Entry: `src/session-distiller.mjs`
 - Search: `distillSession`, `distillBlocks`, `DISTILL_LIMITS`
 - Usage: `node src/session-distiller.mjs <session.jsonl>` or via `POST /api/session-distill` endpoint
-- Purpose: Extract conversation summary from full session JSONL, reduce size by ~90%, create backup + index
+- Purpose: Rebuild a compact independent Claude transcript with fresh UUIDs and a valid linear resume chain; create an exact backup + large-result index
 - Creates: 
   - `{sessionId}/backup-{origId}.jsonl` — copy of original session
   - `{sessionId}/index.md` — distilled conversation with tool result summaries
-  - Injects distiller context message into distilled session
-- Tests: `tests/unit/test-trim-images.mjs` (integration)
+- Appends backup/index metadata to the final conversation record
+- Tests: `tests/unit/test-session-distiller.mjs`
 - Connects to:
   - Server — `POST /api/session-distill` endpoint in `src/server.mjs`
   - Scanner — reads distill artifacts as session bundles
@@ -141,6 +156,8 @@
 - `test-path-correctness.mjs` — scope path decoding
 - `test-security-features.mjs` — security scanner patterns
 - `test-trim-images.mjs` — image block redaction in sessions
+- `test-codex-adapter.mjs` — Codex CLI inventory and scope behavior
+- `test-opencode-adapter.mjs` — OpenCode config, instruction, skill, MCP, and plugin discovery
 
 ### E2E tests
 - Path: `tests/e2e/`
@@ -161,5 +178,4 @@
 
 ## Known drift
 - Drag-and-drop: disabled in runtime, still mentioned in docs/tests
-- Version strings: stale in `server.json`, `.claude-plugin/plugin.json`, `src/mcp-server.mjs`
 - `history.mjs`: dormant, not called by any live code path

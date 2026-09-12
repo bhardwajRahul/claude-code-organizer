@@ -74,6 +74,9 @@ let searchQuery = "";
 let selectMode = false;
 let toastTimer = null;
 let detailPreviewKey = null;
+let inlineEditorPath = null;
+let inlineEditorOriginalContent = null;
+let inlineEditorRequestId = 0;
 let mcpDisabledNames = new Set(); // disabled MCP server names for current scope
 let mcpDisabledScopeId = null;   // which scope the disabled list was loaded for
 let lastBackupFolder = "~/.claude-backups/latest";
@@ -180,7 +183,7 @@ const CHANGELOG = {
     title: "Session Distiller + Image Trimmer",
     tagline: "Reclaim your context window.",
     changes: [
-      "Session Distiller compresses bloated sessions to ~10% of their original size while keeping every word of conversation.",
+      "Session Distiller creates smaller resumable copies with verbatim user/assistant text, an exact backup, and a tool-result index.",
       "Image Trimmer removes base64 screenshots that trigger 'image exceeds dimension limit' warnings.",
       "Both tools run from the dashboard or CLI.",
     ],
@@ -711,6 +714,11 @@ function setupItemList() {
 
 function setupDetailPanel() {
   document.getElementById("detailClose").addEventListener("click", closeDetail);
+  document.getElementById("detailEdit").addEventListener("click", () => {
+    if (selectedItem) startInlineEditor(selectedItem);
+  });
+  document.getElementById("inlineEditorCancel").addEventListener("click", closeInlineEditor);
+  document.getElementById("inlineEditorSave").addEventListener("click", saveInlineEditor);
   document.getElementById("detailOpen").addEventListener("click", () => {
     if (selectedItem) openInEditor(selectedItem.path);
   });
@@ -1532,6 +1540,7 @@ function renderDetailPanel(resetPreview = false) {
   const dates = document.getElementById("detailDates");
   const path = document.getElementById("detailPath");
   const preview = document.getElementById("previewContent");
+  const editBtn = document.getElementById("detailEdit");
   const openBtn = document.getElementById("detailOpen");
   const moveBtn = document.getElementById("detailMove");
   const deleteBtn = document.getElementById("detailDelete");
@@ -1554,6 +1563,9 @@ function renderDetailPanel(resetPreview = false) {
       <div class="d-info-cell"><span class="d-info-label">Modified</span><span class="d-info-val">—</span></div>`;
     path.textContent = "—";
     preview.textContent = "Select an item to preview";
+    closeInlineEditor();
+    editBtn.disabled = true;
+    editBtn.classList.add("hidden");
     openBtn.disabled = true;
     moveBtn.disabled = true;
     deleteBtn.disabled = true;
@@ -1591,6 +1603,9 @@ function renderDetailPanel(resetPreview = false) {
   }
 
   openBtn.disabled = false;
+  const editablePath = getEditableMarkdownPath(selectedItem);
+  editBtn.disabled = !editablePath;
+  editBtn.classList.toggle("hidden", !editablePath);
   moveBtn.disabled = false; // always enabled — locked items use CC prompt instead of API
   deleteBtn.disabled = !canDeleteItem(selectedItem);
 
@@ -1730,6 +1745,7 @@ const CODEX_ITEM_CONFIG_FIELDS = {
 
 let _itemConfigTimers = {};
 let _itemConfigRenderSeq = 0;
+const _frontmatterSaveQueues = new Map();
 
 function getItemConfigFields(item) {
   if (!item) return null;
@@ -1744,6 +1760,66 @@ function getItemFilePath(item) {
   if (item.category === "agent") return `${item.path}`;
   if (item.category === "memory") return item.path;
   return null;
+}
+
+function getEditableMarkdownPath(item) {
+  if (!item || (item.locked && !item.editable)) return null;
+  const filePath = item.openPath || (item.category === "skill" ? `${item.path}/SKILL.md` : item.path);
+  return typeof filePath === "string" && filePath.toLowerCase().endsWith(".md") ? filePath : null;
+}
+
+async function startInlineEditor(item) {
+  const filePath = getEditableMarkdownPath(item);
+  if (!filePath) return;
+  const requestId = ++inlineEditorRequestId;
+  const selectedKey = itemKey(item);
+  for (const timer of Object.values(_itemConfigTimers)) clearTimeout(timer);
+  _itemConfigTimers = {};
+  try {
+    const res = await fetchJson(apiUrl("/api/file-content", { path: filePath }));
+    if (requestId !== inlineEditorRequestId || !selectedItem || itemKey(selectedItem) !== selectedKey) return;
+    if (!res.ok) throw new Error(res.error || "Cannot load file");
+    inlineEditorPath = filePath;
+    inlineEditorOriginalContent = res.content;
+    document.getElementById("inlineEditorContent").value = res.content;
+    document.getElementById("previewContent").classList.add("hidden");
+    document.getElementById("inlineEditor").classList.remove("hidden");
+    document.getElementById("inlineEditorContent").focus();
+  } catch (err) {
+    toast(`Failed to edit: ${err.message}`, true);
+  }
+}
+
+function closeInlineEditor() {
+  inlineEditorRequestId++;
+  inlineEditorPath = null;
+  inlineEditorOriginalContent = null;
+  document.getElementById("inlineEditor")?.classList.add("hidden");
+  document.getElementById("previewContent")?.classList.remove("hidden");
+}
+
+async function saveInlineEditor() {
+  if (!inlineEditorPath || !selectedItem) return;
+  const button = document.getElementById("inlineEditorSave");
+  const content = document.getElementById("inlineEditorContent").value;
+  button.disabled = true;
+  try {
+    const res = await fetchJson(apiUrl("/api/save-markdown"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: inlineEditorPath, content, expectedContent: inlineEditorOriginalContent }),
+    });
+    if (!res.ok) throw new Error(res.error || "Save failed");
+    closeInlineEditor();
+    detailPreviewKey = itemKey(selectedItem);
+    document.getElementById("previewContent").textContent = "Loading...";
+    await loadPreview(selectedItem);
+    toast(`Saved ${selectedItem.name}`);
+  } catch (err) {
+    toast(`Failed to save: ${err.message}`, true);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function renderItemConfig(item) {
@@ -1836,10 +1912,29 @@ function parseFrontmatter(content) {
   return fm;
 }
 
-async function saveFrontmatterField(filePath, key, value) {
+function saveFrontmatterField(filePath, key, value) {
+  const previous = _frontmatterSaveQueues.get(filePath) || Promise.resolve();
+  const queued = previous.catch(() => {}).then(() => writeFrontmatterField(filePath, key, value));
+  _frontmatterSaveQueues.set(filePath, queued);
+
+  // Keep the rejection handled for event-listener callers, while leaving the
+  // original queued promise available to serialize the next edit to this file.
+  const handled = queued.catch(err => {
+    toast(`Failed to save: ${err.message}`, true);
+  });
+  queued.finally(() => {
+    if (_frontmatterSaveQueues.get(filePath) === queued) {
+      _frontmatterSaveQueues.delete(filePath);
+    }
+  }).catch(() => {});
+  return handled;
+}
+
+async function writeFrontmatterField(filePath, key, value) {
+  const itemName = selectedItem?.name || "item";
   try {
     const res = await fetchJson(`/api/file-content?path=${encodeURIComponent(filePath)}`);
-    if (!res.ok) return;
+    if (!res.ok) throw new Error(res.error || "Cannot load file");
 
     let content = res.content;
     const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
@@ -1863,14 +1958,15 @@ async function saveFrontmatterField(filePath, key, value) {
       content = `---\n${fmBody}\n---` + content.slice(fmMatch[0].length);
     }
 
-    await fetchJson("/api/save-frontmatter", {
+    const saved = await fetchJson(apiUrl("/api/save-frontmatter"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: filePath, content }),
+      body: JSON.stringify({ path: filePath, content, expectedContent: res.content }),
     });
-    toast(`Updated ${key} for ${selectedItem?.name || "item"}`);
+    if (!saved.ok) throw new Error(saved.error || "Save failed");
+    toast(`Updated ${key} for ${itemName}`);
   } catch (err) {
-    toast(`Failed to save: ${err.message}`, true);
+    throw err;
   }
 }
 
@@ -1898,11 +1994,13 @@ function getHarnessExecutable() {
 }
 
 function isSessionTranscript(item) {
-  return item?.category === "session" && item.path?.endsWith(".jsonl") && item.subType !== "session-index";
+  return item?.category === "session" && item.path?.endsWith(".jsonl") &&
+    item.subType !== "session-index" && item.subType !== "distill-artifact";
 }
 
 function canDistillSession(item) {
-  return isSessionTranscript(item) && getHarnessDescriptor().id === "claude";
+  return isSessionTranscript(item) && hasCapability("sessionDistill") &&
+    !item.name?.startsWith("[distilled");
 }
 
 function getPromptTemplates() {
@@ -2891,6 +2989,7 @@ function clearScopeHighlights() {
 function showDetail(item) {
   const next = getItemByKey(itemKey(item)) || item;
   const shouldLoadPreview = itemKey(next) !== detailPreviewKey;
+  closeInlineEditor();
   selectedItem = next;
   closeContextBudget();
   document.getElementById("detailPanel").classList.remove("hidden");
@@ -2990,6 +3089,7 @@ async function loadPreview(item) {
 }
 
 function closeDetail() {
+  closeInlineEditor();
   selectedItem = null;
   detailPreviewKey = null;
   document.getElementById("detailPanel").classList.add("hidden");
@@ -3279,7 +3379,7 @@ async function refreshUI() {
   const selectedScopeBefore = selectedScopeId;
   const selectedItemBefore = selectedItem ? itemKey(selectedItem) : null;
 
-  data = await fetchJson("/api/scan");
+  data = await fetchJson(apiUrl("/api/scan"));
 
   selectedScopeId = data.scopes.some((scope) => scope.id === selectedScopeBefore)
     ? selectedScopeBefore

@@ -131,6 +131,16 @@ const categories = [
     preview: "plugin directory",
   }),
   defineCategory({
+    id: "hook",
+    label: "Hooks",
+    filterLabel: "Hooks",
+    icon: "🪝",
+    order: 75,
+    group: "hook",
+    source: "~/.codex/hooks",
+    preview: "hook source",
+  }),
+  defineCategory({
     id: "session",
     label: "Sessions",
     filterLabel: "Sessions",
@@ -187,6 +197,7 @@ const capabilities = {
   mcpPolicy: false,
   mcpSecurity: true,
   sessions: true,
+  sessionDistill: false,
   effective: false,
   backup: true,
 };
@@ -834,6 +845,7 @@ async function scanSkillRoot(scope, root, rootLabel, defaultSubType) {
       path: skillDir,
       openPath: skillMd,
       sourceFile: rootLabel,
+      locked: rel.startsWith(".system/"),
     });
   }
 
@@ -1018,6 +1030,33 @@ async function scanPlugins(scope, ctx) {
       openPath: manifestPath,
       value: manifest,
       valueType: "json",
+      locked: true,
+    });
+  }
+
+  return items;
+}
+
+async function scanHooks(scope, ctx) {
+  if (scope.id !== "global") return [];
+  const root = join(codexDir(ctx), "hooks");
+  const files = await findFilesBySuffix(root, "", 5);
+  const items = [];
+
+  for (const path of files) {
+    const rel = relative(root, path);
+    if (rel.split(/[\\/]/).includes("__pycache__") || path.endsWith(".pyc")) continue;
+    const stat = await safeStat(path);
+    items.push({
+      category: "hook",
+      scopeId: scope.id,
+      name: rel,
+      fileName: rel,
+      description: "Codex hook script",
+      subType: extname(path).replace(/^\./, "") || "hook",
+      ...statFields(stat),
+      path,
+      locked: true,
     });
   }
 
@@ -1296,7 +1335,7 @@ export const codexAdapter = {
     return {
       rootDir,
       backupDir: join(ctx.home, ".codex-backups"),
-      safeRoots: [ctx.home, rootDir],
+      safeRoots: [rootDir, join(ctx.home, ".agents", "skills")],
     };
   },
   discoverScopes,
@@ -1308,6 +1347,7 @@ export const codexAdapter = {
     profile: scanProfiles,
     rule: scanRules,
     plugin: scanPlugins,
+    hook: scanHooks,
     session: scanSessions,
     history: scanHistory,
     shell: scanShellSnapshots,

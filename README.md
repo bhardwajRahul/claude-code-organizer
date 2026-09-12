@@ -1,6 +1,6 @@
 # Cross-Code Organizer (CCO)
 
-### Formerly Claude Code Organizer — the first cross-harness config organizer for AI coding tools.
+### Formerly Claude Code Organizer — a local control panel for AI coding harnesses.
 
 > **AI agents: read [AI_INDEX.md](AI_INDEX.md) first.** It is the navigation manifest for this codebase — where to find every module, how they connect, and where to look before making any claim about the code.
 
@@ -10,7 +10,7 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-314%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-345%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
 [![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [![Activation Scanner](https://img.shields.io/badge/Activation-Scanner%20Preview-purple)](research/README.md)
@@ -20,13 +20,15 @@ English | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [�
 
 > **New: Activation Scanner research preview.** CCO is adding a paper-backed local activation probe for MCP, skill, plugin, hook, and tool-description poisoning. Source-verified scanner paths we inspected rely on text, rules, or classifiers; this preview adds a different signal by freezing a small local sensor model, reading its hidden activations, and training a probe before an untrusted capability runs. See [research/README.md](research/README.md), [research/SCANNER_PIPELINE.md](research/SCANNER_PIPELINE.md), and [research/LIVING_PLAN.md](research/LIVING_PLAN.md).
 
-**Cross-Code Organizer (CCO)** is a cross-harness config organizer for AI coding tools. One dashboard, every harness — Claude Code, Codex CLI, and any future harness you plug in. Switch harnesses from the sidebar, inspect what each tool loads, and clean up your AI coding environment without spelunking through hidden folders.
+**Cross-Code Organizer (CCO)** is a cross-harness config organizer for AI coding tools. One dashboard for Claude Code, Codex CLI, OpenCode, and future adapters. Switch harnesses from the sidebar, inspect what each tool loads, edit Markdown customizations in place, and clean up your AI coding environment without spelunking through hidden folders.
 
-CCO gives you cross-harness visibility. Claude Code has memories, skills, agents, hooks, slash commands, MCP servers, sessions, and context budget tracking. Codex CLI has AGENTS instructions, profiles, sessions, history, shell snapshots, TOML config, MCP servers, and skills. CCO scans each harness through its own adapter, shows the results in one dashboard, and lets you work across harness boundaries — preview files, run MCP security scans, back up harness state, and clean up misplaced config. Adding another harness is one adapter file.
+CCO gives you cross-harness visibility. Claude Code has memories, skills, agents, hooks, slash commands, MCP servers, sessions, and context budget tracking. Codex CLI has AGENTS instructions, profiles, sessions, history, shell snapshots, TOML config, MCP servers, plugins, hooks, and skills. OpenCode has layered JSON/JSONC config, AGENTS instructions, agents, commands, compatibility skill roots, MCP servers, plugins, tools, and themes. CCO normalizes each harness through its own adapter, without pretending that every harness has the same precedence or mutation rules.
 
 **Rename note for search:** Cross-Code Organizer is the current name of the project formerly known as **Claude Code Organizer** (`claude-code-organizer`). If you are looking for a Claude Code memory manager, Claude Code MCP security scanner, Codex CLI config viewer, Cross Code Organizer, or `cross-code-organizer`, you are in the right place.
 
 > **v0.19.3** — Claude Code previews now survive markdown renderer failures, plugin-provided skills are scanned, and project discovery handles non-ASCII paths, lossy encoded paths, and symlinked directories.
+
+> **v0.20.0** — Adds OpenCode inventory, full Markdown editing for editable skills/memories/instructions, a resumable Session Distiller repair, local-server hardening, modern MCP tool annotations, and dependency security updates.
 
 > Scan for poisoned MCP servers. Reclaim wasted context tokens. Disable MCP servers per-project. Find and delete duplicate memories. Move misplaced configs where they belong.
 
@@ -34,7 +36,7 @@ CCO gives you cross-harness visibility. Claude Code has memories, skills, agents
 
 ![Cross-Code Organizer (CCO) Demo](docs/demo.gif)
 
-<sub>314 tests (113 unit + 201 E2E) | Zero telemetry | Demo recorded by AI using [Pagecast](https://github.com/mcpware/pagecast)</sub>
+<sub>345 tests (137 unit + 208 E2E) | Zero telemetry | Demo recorded by AI using [Pagecast](https://github.com/mcpware/pagecast)</sub>
 
 > 100+ stars in 5 days. Built by a CS dropout who found 140 invisible config files controlling AI coding tools and decided no one should have to `cat` each one. First open source project — thank you to everyone who starred, tested, and reported issues.
 
@@ -54,7 +56,7 @@ Other tools solve these one at a time. **CCO solves them in one loop:**
 
 **Find** → Show Effective reveals what Claude Code actually loads per project. Codex scope views show which instructions and configs are in play. Context Budget shows what's eating Claude tokens. Security Scanner shows what's poisoning your MCP tools.
 
-**Fix** → Move items where they belong. Delete duplicates. Click a security finding and land directly on the MCP server entry — delete it, move it, or inspect its config. Done.
+**Fix** → Edit Markdown skills, memories, agents, commands, and instructions directly in the detail panel. Move supported items where they belong, delete duplicates, or click a security finding and land on the relevant MCP server entry.
 
 ![Scan, Find, Fix — all in one dashboard](docs/3panel.png)
 
@@ -89,15 +91,16 @@ Or run directly: `npx @mcpware/cross-code-organizer`
 | Session distillation + image trimming | **Yes** | No | No | No |
 | Backup Center (git-backed, auto-schedule) | **Yes** | No | No | No |
 | MCP tools (AI-accessible) | **Yes** | No | No | No |
-| Multiple harnesses | **Claude Code + Codex CLI** | No | No | No |
+| Multiple harnesses | **Claude Code + Codex CLI + OpenCode** | No | No | No |
+| In-dashboard Markdown editing | **Yes** | No | Varies | Varies |
 
-## Cross-Harness: Claude Code and Codex CLI
+## Cross-Harness: Claude Code, Codex CLI, and OpenCode
 
 CCO started as Claude Code Organizer. It is now Cross-Code Organizer: a harness-based dashboard for AI coding tool config.
 
-Use the **Harness** selector in the sidebar to switch between Claude Code and Codex CLI. Each harness keeps its own rules, paths, categories, and capabilities: Claude Code gets Show Effective, Context Budget, MCP Controls, sessions, backups, and security scanning; Codex CLI gets its `~/.codex` config, AGENTS files, skills, MCP servers, profiles, sessions, history, shell snapshots, runtime files, backups, and security scanning.
+Use the **Harness** selector in the sidebar to switch between Claude Code, Codex CLI, and OpenCode. Each harness keeps its own rules, paths, categories, and capabilities. OpenCode support is deliberately inventory-first: Markdown sources can be edited in place, while move/delete operations remain disabled until their merge and precedence semantics are modeled safely.
 
-The goal is not another single-tool settings viewer. CCO is becoming the universal AI coding tool config manager. Cursor, Windsurf, and Aider support are planned next.
+The goal is not another single-tool settings viewer. CCO is a cross-harness inventory, cleanup, token-hygiene, and safety layer. Cursor, Windsurf, and Aider support remain planned.
 
 ## Context Budget: See How Many Tokens Claude Code Pre-Loads
 
@@ -209,15 +212,15 @@ Built by reverse-engineering Claude Code's leaked source (`~/.claude.json` → `
 
 Claude Code sessions grow fast. After a few hours of coding, a single session can hit 70MB — full of base64 screenshots, multi-thousand-line tool outputs, and file contents you'll never need again. When you `--resume` that session, you're burning context on noise.
 
-Session Distiller fixes this. It reads a session JSONL, keeps every word of your actual conversation, and strips tool results down to what matters:
+Session Distiller creates a new, independently resumable session. It keeps user and assistant text blocks verbatim, removes harness noise and hidden thinking, and turns tool protocol into concise text:
 
-- **Edit results** — keeps the file path and a preview of old/new strings (200 chars each)
-- **Bash results** — keeps head 5 + tail 5 lines of output
-- **Read results** — stripped entirely (the file is still on disk, Claude can re-read it)
-- **Agent results** — keeps up to 2000 chars (research reports are worth preserving)
-- **Write results** — keeps file path and a head/tail preview
+- **Tool calls** — keeps the operation and the input needed to understand intent
+- **Small results** — keeps a concise inline result
+- **Large results** — keeps a preview plus an exact backup line/index reference
+- **Images** — replaces embedded image data with a backup pointer
+- **Session graph** — generates fresh UUIDs and a complete `parentUuid` chain for reliable resume
 
-The original session is backed up before anything changes. An index file is generated so you can see what was kept and where to find the full version.
+The original session is never modified. Distiller snapshots its exact bytes before publishing the new session, then generates an index for omitted large results. Malformed input fails closed instead of silently dropping lines.
 
 **From the dashboard:** Click the ✂ Distill button on any session row. The distilled session appears as an expandable bundle showing the backup and index files.
 
@@ -227,7 +230,9 @@ The original session is backed up before anything changes. An index file is gene
 npx @mcpware/cross-code-organizer --distill <session.jsonl>
 ```
 
-**Typical results:** 70MB session → 7MB distilled. 90% reduction, zero conversation loss.
+**Observed range:** roughly 70–90% smaller depending on how much of the session is tool output. The distilled copy is intentionally lossy for tool payloads; the exact source remains in its private backup.
+
+**Distill or `/compact`?** Distill is useful when you want a deterministic, inspectable copy of a large saved session and may need to recover exact details from a local backup. Claude Code's `/compact` is usually better in the middle of active work because Claude synthesizes decisions and current state into a task-aware summary. Small sessions, evidentiary/audit records, and conversations where full tool output matters should stay raw. Distill is always an explicit per-session action; it never runs automatically.
 
 ### Image Trimmer
 
@@ -294,9 +299,11 @@ Automatic Backup Center scheduling currently uses `systemd` on Linux/WSL and `la
 | **Security Scanner** | ✅ Done | 60 patterns, 9 deobfuscation techniques, rug-pull detection, NEW/CHANGED/UNREACHABLE badges |
 | **MCP Controls** | ✅ Done | Per-project disable/enable, verified against Claude Code source |
 | **Source-Verified Budget** | ✅ Done | Context budget constants matched to leaked Claude Code source |
-| **Session Distiller** | ✅ Done | Strip bloated sessions to ~10% size, keeping all conversation text. Backup + index + bundle UI |
+| **Session Distiller** | ✅ Done | Create a smaller resumable Claude session with verbatim conversation text, a full backup, index, and bundle UI |
 | **Image Trimmer** | ✅ Done | Remove base64 images from sessions. Invokable as `/trim-images` skill |
-| **Codex CLI Harness** | ✅ Done | Sidebar harness selector, `~/.codex` scanner, Codex skills/config/profiles/sessions/history/runtime support |
+| **Codex CLI Harness** | ✅ Done | Sidebar harness selector, `~/.codex` scanner, Codex skills/config/profiles/sessions/history/hooks/runtime support |
+| **OpenCode Harness** | ✅ Inventory | Global/project JSONC config, AGENTS, agents, commands, compatible skills, MCP, plugins, tools, and themes |
+| **Inline Markdown Editor** | ✅ Done | Edit complete skill, memory, agent, command, and instruction files from the detail panel |
 | **Activation Scanner Preview** | 🔬 Research preview | Paper-backed local activation probe, SAE benchmark lane, and text-baseline comparisons in `research/` |
 | **Config Health Score** | 📋 Planned | Per-project health score with actionable recommendations |
 | **Cross-Harness Portability** | 📋 Planned | Convert skills/configs across Claude Code, Codex CLI, Cursor, Windsurf, and Aider |
@@ -378,6 +385,13 @@ MIT
 
 ## Updates
 
+### 2026-09-11
+- v0.20.0: Added inventory-first OpenCode support and expanded Codex inventory
+- Added full in-dashboard Markdown editing with conflict-safe serialized frontmatter saves
+- Rebuilt Session Distiller with exact backups, fresh UUIDs, a valid resume chain, and harness gating
+- Hardened the local server, modernized MCP tool annotations, and updated dependencies
+- Added regression coverage; 345 tests pass (137 unit + 208 E2E)
+
 ### 2026-04-28
 - v0.19.3: Fixed Claude Code preview loading for markdown-backed skills, memories, and agents when the markdown renderer fails
 - Restored Claude project discovery for non-ASCII/lossy encoded paths and symlinked project directories
@@ -390,7 +404,7 @@ MIT
 - Repositioned CCO as the universal AI coding tool config manager, with Cursor, Windsurf, and Aider planned next
 
 ### 2026-04-06
-- v0.17.0: Session Distiller — strip bloated sessions to ~10% size while preserving all conversation text
+- v0.17.0: Session Distiller — create smaller resumable copies while preserving user/assistant text
 - Added image trimmer utility (`trim-images.mjs`) and `/trim-images` skill
 - Session bundles in dashboard tree view (expand to see backup + index files)
 - Distill button on session rows, CLI `--distill` flag, API endpoint
