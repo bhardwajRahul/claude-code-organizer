@@ -37,6 +37,7 @@ tests/unit/*
 !tests/unit/test-session-distiller.mjs
 !tests/unit/test-control-plane.mjs
 !tests/unit/test-metrics-worker.mjs
+!tests/unit/test-cli.mjs
 test-results/
 
 # Cloned reference datasets (too large to push, download separately)

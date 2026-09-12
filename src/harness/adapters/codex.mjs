@@ -1,7 +1,7 @@
 /**
  * Codex CLI harness adapter.
  *
- * Scans the global Codex configuration directory at ~/.codex.
+ * Scans the global Codex configuration directory at $CODEX_HOME (default ~/.codex).
  */
 
 import TOML from "@iarna/toml";
@@ -20,6 +20,16 @@ import {
 } from "../fs-utils.mjs";
 
 function codexDir(ctx) {
+  const configured = typeof ctx.env?.CODEX_HOME === "string"
+    ? ctx.env.CODEX_HOME.trim()
+    : "";
+  if (configured) {
+    if (configured === "~") return ctx.home;
+    if (configured.startsWith("~/") || configured.startsWith("~\\")) {
+      return join(ctx.home, configured.slice(2));
+    }
+    return resolve(configured);
+  }
   return join(ctx.home, ".codex");
 }
 
@@ -64,7 +74,7 @@ const categories = [
     icon: "⚙️",
     order: 10,
     group: "config",
-    source: "~/.codex/config.toml, $CODEX_HOME/AGENTS*.md, repo AGENTS*.md, and repo .codex/config.toml",
+    source: "$CODEX_HOME/config.toml, $CODEX_HOME/AGENTS*.md, repo AGENTS*.md, and repo .codex/config.toml",
     preview: "config file",
   }),
   defineCategory({
@@ -74,7 +84,7 @@ const categories = [
     icon: "🧠",
     order: 20,
     group: "memory",
-    source: "~/.codex/memories/*.md",
+    source: "$CODEX_HOME/memories/*.md",
     preview: "*.md",
     deletable: true,
   }),
@@ -85,7 +95,7 @@ const categories = [
     icon: "⚡",
     order: 30,
     group: "skill",
-    source: "~/.codex/skills, ~/.agents/skills, <repo>/.codex/skills, and <repo>/.agents/skills",
+    source: "$CODEX_HOME/skills, ~/.agents/skills, installed plugin skills, <repo>/.codex/skills, and <repo>/.agents/skills",
     preview: "SKILL.md",
     deletable: true,
   }),
@@ -96,7 +106,7 @@ const categories = [
     icon: "🔌",
     order: 40,
     group: "mcp",
-    source: "~/.codex/config.toml and trusted <repo>/.codex/config.toml mcp_servers",
+    source: "$CODEX_HOME/config.toml and trusted <repo>/.codex/config.toml mcp_servers",
     preview: "mcp_servers entry",
   }),
   defineCategory({
@@ -106,7 +116,7 @@ const categories = [
     icon: "👤",
     order: 50,
     group: "profile",
-    source: "~/.codex/config.toml and trusted <repo>/.codex/config.toml profiles",
+    source: "$CODEX_HOME/config.toml, $CODEX_HOME/<name>.config.toml, and trusted <repo>/.codex/config.toml profiles",
     preview: "profiles entry",
   }),
   defineCategory({
@@ -116,7 +126,7 @@ const categories = [
     icon: "📏",
     order: 60,
     group: "rule",
-    source: "~/.codex/rules",
+    source: "$CODEX_HOME/rules",
     preview: "rule file",
     deletable: true,
   }),
@@ -127,7 +137,7 @@ const categories = [
     icon: "🧩",
     order: 70,
     group: "plugin",
-    source: "~/.codex/plugins",
+    source: "$CODEX_HOME/plugins",
     preview: "plugin directory",
   }),
   defineCategory({
@@ -137,7 +147,7 @@ const categories = [
     icon: "🪝",
     order: 75,
     group: "hook",
-    source: "~/.codex/hooks",
+    source: "$CODEX_HOME/hooks.json and $CODEX_HOME/hooks",
     preview: "hook source",
   }),
   defineCategory({
@@ -147,7 +157,7 @@ const categories = [
     icon: "💬",
     order: 80,
     group: "session",
-    source: "~/.codex/sessions and ~/.codex/session_index.jsonl",
+    source: "$CODEX_HOME/sessions and $CODEX_HOME/session_index.jsonl",
     preview: "session JSONL",
     sortDefault: "date",
   }),
@@ -158,7 +168,7 @@ const categories = [
     icon: "🕘",
     order: 90,
     group: "history",
-    source: "~/.codex/history.jsonl",
+    source: "$CODEX_HOME/history.jsonl",
     preview: "prompt history JSONL",
     sortDefault: "date",
   }),
@@ -169,7 +179,7 @@ const categories = [
     icon: "💻",
     order: 100,
     group: "shell",
-    source: "~/.codex/shell_snapshots/*.sh",
+    source: "$CODEX_HOME/shell_snapshots/*.sh",
     preview: "shell snapshot",
     sortDefault: "date",
   }),
@@ -180,7 +190,7 @@ const categories = [
     icon: "🗄️",
     order: 110,
     group: "runtime",
-    source: "~/.codex runtime metadata, caches, logs, and databases",
+    source: "$CODEX_HOME runtime metadata, caches, logs, and databases",
     preview: "runtime file",
     sortDefault: "date",
   }),
@@ -825,7 +835,7 @@ async function directorySummary(dir) {
   };
 }
 
-async function scanSkillRoot(scope, root, rootLabel, defaultSubType) {
+async function scanSkillRoot(scope, root, rootLabel, defaultSubType, lockAll = false) {
   const items = [];
   const skillDirs = await findSkillDirs(root);
 
@@ -845,7 +855,7 @@ async function scanSkillRoot(scope, root, rootLabel, defaultSubType) {
       path: skillDir,
       openPath: skillMd,
       sourceFile: rootLabel,
-      locked: rel.startsWith(".system/"),
+      locked: lockAll || rel.startsWith(".system/"),
     });
   }
 
@@ -866,6 +876,21 @@ async function scanSkills(scope, ctx) {
   const items = [];
   for (const entry of roots) {
     items.push(...await scanSkillRoot(scope, entry.root, entry.label, entry.subType));
+  }
+
+  if (scope.id === "global") {
+    const pluginRoot = join(codexDir(ctx), "plugins");
+    for (const { dir, manifestPath } of await findPluginManifests(pluginRoot)) {
+      const manifest = await readJson(manifestPath) || {};
+      const pluginName = manifest.name || manifest.id || basename(dir);
+      items.push(...await scanSkillRoot(
+        scope,
+        join(dir, "skills"),
+        `plugin:${pluginName}`,
+        "plugin-skill",
+        true,
+      ));
+    }
   }
   return items;
 }
@@ -948,6 +973,31 @@ async function scanProfiles(scope, ctx) {
       valueType: "toml-table",
       sourceFile: scope.id === "global" ? "config.toml" : ".codex/config.toml",
     });
+  }
+
+  if (scope.id === "global") {
+    let entries;
+    try { entries = await readdir(codexDir(ctx), { withFileTypes: true }); } catch { entries = []; }
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(".config.toml")) continue;
+      const profilePath = join(codexDir(ctx), entry.name);
+      const profile = await readTomlFile(profilePath);
+      if (!profile.content) continue;
+      const name = entry.name.slice(0, -".config.toml".length);
+      items.push({
+        category: "profile",
+        scopeId: scope.id,
+        name,
+        fileName: entry.name,
+        description: profile.error ? `TOML parse error: ${profile.error.message}` : profileDescription(profile.config),
+        subType: "profile-file",
+        ...statFields(profile.stat),
+        path: profilePath,
+        value: profile.error ? undefined : profile.config,
+        valueType: profile.error ? "invalid-toml" : "toml",
+        sourceFile: entry.name,
+      });
+    }
   }
 
   return items;
@@ -1042,6 +1092,26 @@ async function scanHooks(scope, ctx) {
   const root = join(codexDir(ctx), "hooks");
   const files = await findFilesBySuffix(root, "", 5);
   const items = [];
+
+  const configPath = join(codexDir(ctx), "hooks.json");
+  const configStat = await safeStat(configPath);
+  if (configStat) {
+    const config = await readJson(configPath);
+    const eventCount = objectEntries(config?.hooks).length;
+    items.push({
+      category: "hook",
+      scopeId: scope.id,
+      name: "hooks.json",
+      fileName: "hooks.json",
+      description: eventCount ? `Codex hook configuration (${eventCount} event groups)` : "Codex hook configuration",
+      subType: "hook-config",
+      ...statFields(configStat),
+      path: configPath,
+      value: config || undefined,
+      valueType: config ? "json" : "invalid-json",
+      locked: true,
+    });
+  }
 
   for (const path of files) {
     const rel = relative(root, path);

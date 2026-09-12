@@ -10,7 +10,7 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-382%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-386%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
 [![Telemetry: Explicit Opt-in](https://img.shields.io/badge/telemetry-explicit%20opt--in-blue)](PRIVACY.md)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [![Activation Scanner](https://img.shields.io/badge/Activation-Scanner%20Preview-purple)](research/README.md)
@@ -142,7 +142,7 @@ For Claude Code, each category has its own behavior:
 
 Click **✦ Show Effective** to see what actually applies in any project. Shadowed items, name conflicts, and ancestor-loaded configs are all surfaced with badges and explanations. Hover any category pill for its specific rule. Items are tagged: `GLOBAL`, `ANCESTOR`, `SHADOWED`, `⚠ CONFLICT`.
 
-For Codex CLI, CCO scans `~/.codex`, trusted project `.codex` config, AGENTS files, profiles, sessions, history, runtime metadata, shell snapshots, skills, and MCP server config so you can inspect the Codex side without leaving the same dashboard.
+For Codex CLI, CCO honors `$CODEX_HOME` (default `~/.codex`) and scans trusted project `.codex` config, AGENTS files, legacy and standalone profiles, sessions, history, runtime metadata, shell snapshots, personal/project/plugin-provided skills, `hooks.json` plus hook scripts, and MCP server config so you can inspect the Codex side without leaving the same dashboard. Managed plugin skills and hook configuration are visible but read-only.
 
 ![Duplicate MCP Servers](docs/reloaded%20mcp%20form%20diff%20scope.png)
 
@@ -402,14 +402,14 @@ MIT
 ## Updates
 
 ### 2026-09-11
-- v0.20.0: Added inventory-first OpenCode and DeepSeek Harness support and expanded Codex inventory
+- v0.20.0: Added inventory-first OpenCode and DeepSeek Harness support and expanded Codex inventory, including plugin-provided skills, hook configuration, and standalone profiles
 - Added a source-labelled All Memories scope and local body search across Claude memory files
 - Added Harness Doctor: Effective Context Map, explainable hygiene scoring, reversible exact-duplicate repair, and copy-only cross-harness skill migration
 - Added disabled-by-default anonymous monthly active-install metrics; detailed event aggregates remain local
 - Added full in-dashboard Markdown editing with conflict-safe serialized frontmatter saves
 - Rebuilt Session Distiller with exact backups, fresh UUIDs, a valid resume chain, and harness gating
 - Hardened the local server, modernized MCP tool annotations, and updated dependencies
-- Added regression coverage; 382 tests pass (170 unit + 212 E2E)
+- Added regression coverage; 386 tests pass (174 unit + 212 E2E)
 
 ### 2026-04-28
 - v0.19.3: Fixed Claude Code preview loading for markdown-backed skills, memories, and agents when the markdown renderer fails

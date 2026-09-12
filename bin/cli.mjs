@@ -6,9 +6,10 @@
  *   node bin/cli.mjs              → Start web dashboard (HTTP server)
  *   node bin/cli.mjs --mcp        → Start MCP server (stdio, for AI clients)
  *   node bin/cli.mjs --port 3847  → Start web dashboard on custom port
+ *   node bin/cli.mjs --help       → Show CLI usage
  */
 
-import { access, constants, mkdir, writeFile, readFile } from 'node:fs/promises';
+import { access, constants, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { isNewerVersion } from '../src/version.mjs';
@@ -18,27 +19,43 @@ const isMcpMode = args.includes('--mcp');
 const distillIdx = args.indexOf('--distill');
 const isDistillMode = distillIdx !== -1;
 
-// ── Pre-flight check: verify ~/.claude/ exists and is readable ──
-// Skip for MCP mode — server returns empty results if ~/.claude/ missing
-if (!isMcpMode) {
-  const claudeDir = join(homedir(), '.claude');
-  try {
-    await access(claudeDir, constants.R_OK);
-  } catch {
-    console.error(`\n  ✗ Cannot read ${claudeDir}\n`);
-    console.error(`  Claude Code stores its config in ~/.claude/ but this directory`);
-    console.error(`  either doesn't exist or isn't readable by your current user.\n`);
-    console.error(`  To fix:`);
-    console.error(`    1. Make sure Claude Code has been run at least once`);
-    console.error(`    2. Check permissions: ls -la ~/.claude/`);
-    console.error(`    3. If needed:  chmod u+r ~/.claude\n`);
-    process.exit(1);
-  }
+if (args.includes('--help') || args.includes('-h')) {
+  console.log(`Cross-Code Organizer (CCO)
+
+Usage:
+  cross-code-organizer [--port <number>] [--no-open]
+  cross-code-organizer --distill <session.jsonl>
+  cross-code-organizer --mcp
+
+Options:
+  --port <number>          Dashboard port (default: 3847)
+  --no-open                Do not open a browser automatically
+  --distill <session>      Create a resumable distilled Claude session
+  --mcp                    Run the MCP server over stdio
+  -v, --version            Print the installed version
+  -h, --help               Show this help`);
+  process.exit(0);
 }
 
+if (args.includes('--version') || args.includes('-v')) {
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  console.log(require('../package.json').version);
+  process.exit(0);
+}
+
+// Claude Code is optional: Codex, OpenCode, and DSH-only users must still be
+// able to start the cross-harness dashboard.
+const claudeDir = join(homedir(), '.claude');
+let hasClaudeHome = false;
+try {
+  await access(claudeDir, constants.R_OK);
+  hasClaudeHome = true;
+} catch {}
+
 // ── Auto-install /cco skill if not present ──
-if (!isMcpMode) {
-  const skillDir = join(homedir(), '.claude', 'skills', 'cco');
+if (!isMcpMode && hasClaudeHome) {
+  const skillDir = join(claudeDir, 'skills', 'cco');
   const skillFile = join(skillDir, 'SKILL.md');
   try {
     await access(skillFile, constants.R_OK);

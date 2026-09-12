@@ -17,6 +17,7 @@ async function createCodexHome() {
   await mkdir(join(codexDir, 'rules'), { recursive: true });
   await mkdir(join(codexDir, 'hooks'), { recursive: true });
   await mkdir(join(codexDir, 'plugins', 'cache', 'openai-curated', 'github', 'abc123', '.codex-plugin'), { recursive: true });
+  await mkdir(join(codexDir, 'plugins', 'cache', 'openai-curated', 'github', 'abc123', 'skills', 'plugin-skill'), { recursive: true });
 
   await writeFile(join(codexDir, 'config.toml'), `
 model = "gpt-5.5"
@@ -33,6 +34,11 @@ args = ["-y", "@upstash/context7-mcp"]
 
 [mcp_servers.remote]
 url = "https://example.com/mcp"
+`);
+
+  await writeFile(join(codexDir, 'fast.config.toml'), `
+model = "gpt-5.5"
+sandbox_mode = "workspace-write"
 `);
 
   await writeFile(join(codexDir, 'memories', 'project.md'), `---
@@ -55,11 +61,19 @@ Nested system skill layout.
 
   await writeFile(join(codexDir, 'rules', 'default.rules'), 'always respond with concise engineering notes\n');
   await writeFile(join(codexDir, 'hooks', 'validate.py'), 'print("validate")\n');
+  await writeFile(join(codexDir, 'hooks.json'), JSON.stringify({
+    description: 'Test hooks',
+    hooks: { PreToolUse: [], PostToolUse: [] },
+  }, null, 2));
 
   await writeFile(join(codexDir, 'plugins', 'cache', 'openai-curated', 'github', 'abc123', '.codex-plugin', 'plugin.json'), JSON.stringify({
     name: 'github',
     description: 'GitHub plugin',
   }, null, 2));
+  await writeFile(join(codexDir, 'plugins', 'cache', 'openai-curated', 'github', 'abc123', 'skills', 'plugin-skill', 'SKILL.md'), `# Plugin Skill
+
+Installed with the GitHub plugin.
+`);
 
   return {
     home,
@@ -139,28 +153,57 @@ describe('Codex adapter', () => {
       assert.deepStrictEqual(result.scopes.map(scope => scope.id), ['global']);
       assert.strictEqual(result.counts.config, 1);
       assert.strictEqual(result.counts.memory, 1);
-      assert.strictEqual(result.counts.skill, 2);
+      assert.strictEqual(result.counts.skill, 3);
       assert.strictEqual(result.counts.mcp, 2);
-      assert.strictEqual(result.counts.profile, 1);
+      assert.strictEqual(result.counts.profile, 2);
       assert.strictEqual(result.counts.rule, 1);
       assert.strictEqual(result.counts.plugin, 1);
-      assert.strictEqual(result.counts.hook, 1);
+      assert.strictEqual(result.counts.hook, 2);
 
       assert.ok(result.items.some(item => item.category === 'config' && item.name === 'config.toml'));
       assert.ok(result.items.some(item => item.category === 'memory' && item.name === 'Project Memory'));
       assert.ok(result.items.some(item => item.category === 'skill' && item.name === 'demo-skill'));
       assert.ok(result.items.some(item => item.category === 'skill' && item.name === '.system/system-skill'));
+      assert.ok(result.items.some(item => item.category === 'skill' && item.name === 'plugin-skill' && item.sourceFile === 'plugin:github'));
       assert.ok(result.items.some(item => item.category === 'mcp' && item.name === 'context7' && item.mcpConfig.command === 'npx'));
       assert.ok(result.items.some(item => item.category === 'mcp' && item.name === 'remote' && item.mcpConfig.url === 'https://example.com/mcp'));
       assert.ok(result.items.some(item => item.category === 'profile' && item.name === 'review'));
+      assert.ok(result.items.some(item => item.category === 'profile' && item.name === 'fast' && item.subType === 'profile-file'));
       assert.ok(result.items.some(item => item.category === 'rule' && item.name === 'default.rules'));
       assert.ok(result.items.some(item => item.category === 'plugin' && item.name === 'github'));
       assert.ok(result.items.some(item => item.category === 'hook' && item.name === 'validate.py'));
+      assert.ok(result.items.some(item => item.category === 'hook' && item.name === 'hooks.json' && item.subType === 'hook-config'));
       assert.strictEqual(result.items.find(item => item.category === 'skill' && item.name === 'demo-skill').locked, false);
       assert.strictEqual(result.items.find(item => item.category === 'skill' && item.name === '.system/system-skill').locked, true);
+      assert.strictEqual(result.items.find(item => item.category === 'skill' && item.name === 'plugin-skill').locked, true);
       assert.strictEqual(result.items.find(item => item.category === 'plugin' && item.name === 'github').locked, true);
     } finally {
       await env.cleanup();
+    }
+  });
+
+  it('honors a custom CODEX_HOME instead of scanning the default directory', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'cco-codex-home-'));
+    const customCodexHome = join(home, 'custom-codex');
+    try {
+      await mkdir(join(home, '.codex'), { recursive: true });
+      await writeFile(join(home, '.codex', 'config.toml'), 'model = "wrong-default-home"\n');
+      await mkdir(join(customCodexHome, 'memories'), { recursive: true });
+      await writeFile(join(customCodexHome, 'config.toml'), 'model = "gpt-5.5"\n');
+      await writeFile(join(customCodexHome, 'memories', 'custom.md'), '# Custom Home Memory\n');
+
+      const result = await scanHarness(codexAdapter, {
+        home,
+        cwd: home,
+        env: { CODEX_HOME: customCodexHome },
+      });
+
+      assert.ok(result.items.some(item => item.category === 'config' && item.path === join(customCodexHome, 'config.toml')));
+      assert.ok(result.items.some(item => item.category === 'memory' && item.path === join(customCodexHome, 'memories', 'custom.md')));
+      assert.equal(result.items.some(item => item.path.startsWith(join(home, '.codex'))), false);
+      assert.equal(codexAdapter.getPaths({ home, env: { CODEX_HOME: customCodexHome } }).rootDir, customCodexHome);
+    } finally {
+      await rm(home, { recursive: true, force: true });
     }
   });
 
