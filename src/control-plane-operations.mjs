@@ -21,21 +21,47 @@ async function exists(path) {
 }
 
 async function hashEntry(hash, root, current) {
-  const stat = await lstat(current);
-  if (stat.isSymbolicLink()) throw new Error("Symbolic links are not eligible for automatic repair or migration");
   const relativeName = current === root ? "." : current.slice(root.length + 1);
-  if (stat.isDirectory()) {
+  let entries;
+  try {
+    entries = await readdir(current, { withFileTypes: true });
+  } catch (error) {
+    if (error.code !== "ENOTDIR") throw error;
+  }
+
+  if (entries) {
+    const pathStat = await lstat(current);
+    if (pathStat.isSymbolicLink() || !pathStat.isDirectory()) {
+      throw new Error("Symbolic links are not eligible for automatic repair or migration");
+    }
     hash.update(`d:${relativeName}\n`);
-    const entries = await readdir(current);
-    for (const name of entries.sort()) await hashEntry(hash, root, join(current, name));
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (entry.isSymbolicLink()) throw new Error("Symbolic links are not eligible for automatic repair or migration");
+      if (!entry.isDirectory() && !entry.isFile()) throw new Error("Unsupported filesystem entry");
+      await hashEntry(hash, root, join(current, entry.name));
+    }
     return;
   }
-  if (!stat.isFile()) throw new Error("Unsupported filesystem entry");
-  const flags = fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW || 0);
-  const handle = await open(current, flags);
+
+  const flags = fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW || 0) | (fsConstants.O_NONBLOCK || 0);
+  let handle;
+  try {
+    handle = await open(current, flags);
+  } catch (error) {
+    if (["ELOOP", "EMLINK"].includes(error.code)) {
+      throw new Error("Symbolic links are not eligible for automatic repair or migration");
+    }
+    throw error;
+  }
   try {
     const openedStat = await handle.stat();
-    if (!openedStat.isFile()) throw new Error("Unsupported filesystem entry");
+    const pathStat = await lstat(current);
+    if (
+      pathStat.isSymbolicLink() || !openedStat.isFile() || !pathStat.isFile() ||
+      openedStat.dev !== pathStat.dev || openedStat.ino !== pathStat.ino
+    ) {
+      throw new Error("Symbolic links are not eligible for automatic repair or migration");
+    }
     hash.update(`f:${relativeName}:${openedStat.size}\n`);
     hash.update(await handle.readFile());
   } finally {

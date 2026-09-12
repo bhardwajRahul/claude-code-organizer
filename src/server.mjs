@@ -1585,8 +1585,7 @@ export function startServer(port = 3847, maxRetries = 10) {
     } catch (err) {
       const status = err.statusCode || 500;
       if (status >= 500) {
-        const message = String(err?.message || "Unknown error").replace(/[\r\n\u2028\u2029]/g, " ");
-        console.error("Error:", message);
+        console.error("Request failed with an internal server error");
       }
       res.writeHead(status, { ...SECURITY_HEADERS, "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: false, error: err.message }));

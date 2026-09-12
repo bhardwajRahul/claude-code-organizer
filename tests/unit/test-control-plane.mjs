@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkdtemp } from "node:fs/promises";
@@ -10,6 +10,7 @@ import {
   applyExactDuplicateRepair,
   applySkillMigration,
   findExactDuplicateRepairs,
+  fingerprintPath,
   previewSkillMigration,
   skillRootFor,
   undoControlPlaneTransaction,
@@ -118,6 +119,19 @@ describe("control-plane context and hygiene", () => {
 });
 
 describe("reversible repair and skill migration", () => {
+  it("refuses to fingerprint symbolic links", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cco-fingerprint-"));
+    try {
+      const target = join(root, "target.md");
+      const link = join(root, "link.md");
+      await writeFile(target, "safe\n");
+      await symlink(target, link);
+      await assert.rejects(fingerprintPath(link), /Symbolic links are not eligible/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("maps DeepSeek Harness skill migrations to its official roots", () => {
     assert.equal(skillRootFor("dsh", "/home/user/.dsh"), "/home/user/.dsh/skills");
     assert.equal(
