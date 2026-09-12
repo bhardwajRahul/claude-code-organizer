@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -75,6 +75,56 @@ describe('CLI informational flags', () => {
 
       assert.equal(stderr, '');
       await assert.rejects(access(join(home, '.claude')));
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) {
+        const exited = once(child, 'exit');
+        child.kill('SIGTERM');
+        await exited;
+      }
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it('installs a current cross-harness /cco skill that follows the actual server URL', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'cco-cli-home-'));
+    await mkdir(join(home, '.claude'), { recursive: true });
+    const child = spawn(process.execPath, [cliPath, '--no-open', '--port', '0'], {
+      cwd: repoRoot,
+      env: { ...process.env, HOME: home },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+
+    try {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error(`CLI did not start; stderr: ${stderr}`)), 5000);
+        child.stderr.on('data', chunk => { stderr += chunk; });
+        child.stdout.on('data', chunk => {
+          stdout += chunk;
+          if (stdout.includes('Cross-Code Organizer (CCO) running at')) {
+            clearTimeout(timeout);
+            resolve();
+          }
+        });
+        child.once('error', error => {
+          clearTimeout(timeout);
+          reject(error);
+        });
+        child.once('exit', code => {
+          if (!stdout.includes('Cross-Code Organizer (CCO) running at')) {
+            clearTimeout(timeout);
+            reject(new Error(`CLI exited early (${code}); stderr: ${stderr}`));
+          }
+        });
+      });
+
+      const skill = await readFile(join(home, '.claude', 'skills', 'cco', 'SKILL.md'), 'utf8');
+      assert.match(skill, /Claude Code, Codex CLI, OpenCode, and DeepSeek Harness/);
+      assert.match(skill, /exact URL that CCO printed/);
+      assert.doesNotMatch(skill, /Global > Workspace > Project/);
+      assert.doesNotMatch(skill, /http:\/\/localhost:3847/);
+      assert.equal(stderr, '');
     } finally {
       if (child.exitCode === null && child.signalCode === null) {
         const exited = once(child, 'exit');

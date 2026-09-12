@@ -66,16 +66,16 @@ if (!isMcpMode && hasClaudeHome) {
       await writeFile(skillFile, [
         '---',
         'name: cco',
-        'description: Open Cross-Code Organizer (CCO) dashboard to manage memories, skills, MCP servers across scopes',
+        'description: Open the local Cross-Code Organizer dashboard to inspect and clean AI coding harness configuration',
         'model: haiku',
         '---',
         '',
-        '1. Run `npx @mcpware/cross-code-organizer@latest` in background',
-        '2. Wait 3 seconds for the server to start',
-        '3. Open the browser: `xdg-open http://localhost:3847` (Linux) or `open http://localhost:3847` (macOS)',
-        '4. Always tell the user: **http://localhost:3847**',
+        '1. Run `npx @mcpware/cross-code-organizer@latest --no-open` in the background.',
+        '2. Wait until CCO prints its local dashboard URL.',
+        '3. Open that exact URL with the available browser command or browser tool.',
+        '4. Tell the user the exact URL that CCO printed.',
         '',
-        'The dashboard shows your full scope hierarchy (Global > Workspace > Project) with drag-and-drop between scopes.',
+        'CCO inventories Claude Code, Codex CLI, OpenCode, and DeepSeek Harness configuration. Use it to inspect and edit supported memories, skills, agents, commands, hooks, instructions, MCP servers, and config, or to run preview-first Harness Doctor repairs.',
         ''
       ].join('\n'));
       console.log('  ✓ Installed /cco skill globally — next time just type /cco in Claude Code!\n');
