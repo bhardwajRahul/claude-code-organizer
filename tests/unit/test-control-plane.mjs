@@ -330,12 +330,14 @@ describe("privacy metrics", () => {
     const september = buildMonthlyActiveSignal(state, "0.20.0", "claude", new Date("2026-09-01T00:00:00Z"));
     const septemberAgain = buildMonthlyActiveSignal(state, "0.20.0", "claude", new Date("2026-09-30T23:59:59Z"));
     const october = buildMonthlyActiveSignal(state, "0.20.0", "claude", new Date("2026-10-01T00:00:00Z"));
+    const dshHarness = buildMonthlyActiveSignal(state, "0.20.0", "dsh", new Date("2026-10-01T00:00:00Z"));
     const unknownHarness = buildMonthlyActiveSignal(state, "0.20.0", "not-a-harness", new Date("2026-10-01T00:00:00Z"));
 
     assert.deepEqual(Object.keys(september), ["schema", "month", "monthlyId", "version", "harness"]);
     assert.match(september.monthlyId, /^[a-f0-9]{32}$/);
     assert.equal(september.monthlyId, septemberAgain.monthlyId);
     assert.notEqual(september.monthlyId, october.monthlyId);
+    assert.equal(dshHarness.harness, "dsh");
     assert.equal(unknownHarness.harness, "unknown");
   });
 

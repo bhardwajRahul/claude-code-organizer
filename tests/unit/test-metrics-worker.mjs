@@ -40,18 +40,21 @@ describe("metrics worker", () => {
     assert.deepEqual(await response.json(), { ok: true, service: "cco-metrics", schema: "cco-mau-v1" });
   });
 
-  it("accepts an allowlisted current-month signal", async () => {
+  it("accepts every allowlisted harness in a current-month signal", async () => {
     const { env, calls } = mockEnvironment();
-    const response = await worker.fetch(new Request("https://metrics.example/v1/mau", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(signal()),
-    }), env);
+    const harnesses = ["claude", "codex", "opencode", "dsh", "unknown"];
+    for (const harness of harnesses) {
+      const response = await worker.fetch(new Request("https://metrics.example/v1/mau", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(signal({ harness })),
+      }), env);
 
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { ok: true, counted: true });
-    assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0].values.slice(0, 4), [signal().month, signal().monthlyId, "0.20.0", "claude"]);
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { ok: true, counted: true });
+    }
+    assert.equal(calls.length, harnesses.length);
+    assert.deepEqual(calls.map(call => call.values[3]), harnesses);
   });
 
   it("rejects stale, oversized, and expanded payloads before database access", async () => {

@@ -22,7 +22,7 @@ const ALLOWED_EVENTS = new Set([
   "migration_undo",
 ]);
 
-const ALLOWED_HARNESSES = new Set(["claude", "codex", "opencode", "unknown"]);
+const ALLOWED_HARNESSES = new Set(["claude", "codex", "opencode", "dsh", "unknown"]);
 const stateQueues = new Map();
 export const DEFAULT_METRICS_ENDPOINT = "https://cco-metrics-api.keungkawai5.workers.dev/v1/mau";
 const ACTIVE_CONSENT_VERSION = "cco-mau-v1";

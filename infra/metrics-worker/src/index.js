@@ -1,4 +1,4 @@
-const ALLOWED_HARNESSES = new Set(["claude", "codex", "opencode", "unknown"]);
+const ALLOWED_HARNESSES = new Set(["claude", "codex", "opencode", "dsh", "unknown"]);
 const MAX_BODY_BYTES = 1024;
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 const ID_RE = /^[a-f0-9]{32}$/;
