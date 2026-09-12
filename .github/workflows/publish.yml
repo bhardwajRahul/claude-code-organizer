@@ -34,6 +34,21 @@ jobs:
       - name: Build (if applicable)
         run: npm run build --if-present
 
+      - name: Verify release metadata and unit tests
+        env:
+          CCO_RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node scripts/verify-release.mjs
+          npm run test:unit
+          npm audit --omit=dev
+          npm pack --dry-run
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run end-to-end tests
+        run: npm test
+
       - name: Check if version already published
         id: check
         run: |

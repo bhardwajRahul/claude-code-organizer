@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { access, mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +11,8 @@ import { describe, it } from 'node:test';
 const execFileAsync = promisify(execFile);
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const cliPath = join(repoRoot, 'bin', 'cli.mjs');
+const releaseVerifierPath = join(repoRoot, 'scripts', 'verify-release.mjs');
+const packageVersion = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')).version;
 
 async function runInformationalFlag(flag) {
   const home = await mkdtemp(join(tmpdir(), 'cco-cli-home-'));
@@ -81,5 +83,29 @@ describe('CLI informational flags', () => {
       }
       await rm(home, { recursive: true, force: true });
     }
+  });
+});
+
+describe('release metadata verifier', () => {
+  it('accepts synchronized package, plugin, MCP, tag, and notes metadata', async () => {
+    const { stdout, stderr } = await execFileAsync(process.execPath, [releaseVerifierPath], {
+      cwd: repoRoot,
+      env: { ...process.env, CCO_RELEASE_TAG: `v${packageVersion}` },
+    });
+    assert.match(stdout, /Release metadata verified/);
+    assert.equal(stderr, '');
+  });
+
+  it('rejects a tag that does not match the package version', async () => {
+    await assert.rejects(
+      execFileAsync(process.execPath, [releaseVerifierPath], {
+        cwd: repoRoot,
+        env: { ...process.env, CCO_RELEASE_TAG: 'v9.9.9' },
+      }),
+      error => {
+        assert.ok(error.stderr.includes(`release tag: expected "v${packageVersion}", got "v9.9.9"`));
+        return true;
+      },
+    );
   });
 });
