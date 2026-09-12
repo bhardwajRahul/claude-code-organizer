@@ -134,11 +134,13 @@ function coarseBucket(value) {
 }
 
 function pruneDays(state, today) {
-  const cutoff = new Date(`${today}T00:00:00.000Z`);
-  cutoff.setUTCDate(cutoff.getUTCDate() - 30);
+  const current = new Date(`${today}T00:00:00.000Z`);
+  const cutoff = new Date(current);
+  cutoff.setUTCDate(cutoff.getUTCDate() - 29);
   let changed = false;
   for (const day of Object.keys(state.days || {})) {
-    if (new Date(`${day}T00:00:00.000Z`) < cutoff) {
+    const date = new Date(`${day}T00:00:00.000Z`);
+    if (!Number.isFinite(date.getTime()) || date < cutoff || date > current) {
       delete state.days[day];
       changed = true;
     }
@@ -146,11 +148,11 @@ function pruneDays(state, today) {
   return changed;
 }
 
-export async function recordPrivacyMetric(home, event, harnessId, { inventoryCount = null } = {}) {
+export async function recordPrivacyMetric(home, event, harnessId, { inventoryCount = null, now = new Date() } = {}) {
   if (!ALLOWED_EVENTS.has(event)) return false;
   return withStateLock(home, async () => {
     const state = await readState(home);
-    const day = dayKey();
+    const day = dayKey(now);
     const pruned = pruneDays(state, day);
     if (!publicStatus(state).enabled) {
       if (pruned) await saveState(home, state);

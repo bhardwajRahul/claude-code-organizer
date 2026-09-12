@@ -325,6 +325,44 @@ describe("privacy metrics", () => {
     }
   });
 
+  it("retains at most 30 UTC daily buckets including today", async () => {
+    const home = await mkdtemp(join(tmpdir(), "cco-retention-"));
+    const now = new Date("2026-09-11T12:00:00Z");
+    const dayOffset = offset => {
+      const date = new Date(now);
+      date.setUTCDate(date.getUTCDate() - offset);
+      return date.toISOString().slice(0, 10);
+    };
+    const expiredDay = dayOffset(30);
+    const oldestRetainedDay = dayOffset(29);
+    const futureDay = dayOffset(-1);
+    try {
+      await mkdir(join(home, ".cco"), { recursive: true });
+      await writeFile(metricsPath(home), JSON.stringify({
+        version: 2,
+        enabled: true,
+        consentVersion: "cco-mau-v1",
+        secret: "retention-test-secret",
+        days: {
+          [expiredDay]: { events: {}, harnesses: {}, inventoryBucket: null },
+          [oldestRetainedDay]: { events: {}, harnesses: {}, inventoryBucket: null },
+          [futureDay]: { events: {}, harnesses: {}, inventoryBucket: null },
+          invalid: { events: {}, harnesses: {}, inventoryBucket: null },
+        },
+      }));
+
+      await recordPrivacyMetric(home, "doctor_open", "claude", { now });
+      const state = JSON.parse(await readFile(metricsPath(home), "utf8"));
+      assert.equal(expiredDay in state.days, false);
+      assert.equal(oldestRetainedDay in state.days, true);
+      assert.equal(dayOffset(0) in state.days, true);
+      assert.equal(futureDay in state.days, false);
+      assert.equal("invalid" in state.days, false);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   it("builds a minimal identifier that is stable within a month and rotates next month", () => {
     const state = { secret: "test-secret" };
     const september = buildMonthlyActiveSignal(state, "0.20.0", "claude", new Date("2026-09-01T00:00:00Z"));

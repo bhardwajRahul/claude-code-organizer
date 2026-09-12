@@ -16,7 +16,7 @@ The complete payload is:
 - UTC month (`YYYY-MM`)
 - a 128-bit pseudonymous ID that changes every month
 - installed CCO version
-- selected harness ID (`claude`, `codex`, `opencode`, or `unknown`)
+- selected harness ID (`claude`, `codex`, `opencode`, `dsh`, or `unknown`)
 
 The monthly ID is derived from a random secret stored only on your machine. It is stable within one month for deduplication and deliberately changes the next month, so the collector cannot build a cross-month user history. CCO calls this an active-install count because one person may use several installations and several people may share one installation.
 
@@ -30,7 +30,7 @@ You can disable metrics at any time in Harness Doctor. CCO does not use cookies,
 
 ## What It Accesses
 
-- Reads selected config and customization files for supported harnesses, including `~/.claude/`, `~/.codex/`, `~/.config/opencode/`, and discovered project directories
+- Reads selected config and customization files for supported harnesses, including `~/.claude/`, `$CODEX_HOME` (default `~/.codex/`), `~/.config/opencode/`, `$DSH_HOME` (default `~/.dsh/`), `$DSH_AGENTS_HOME` (default `~/.agents/`), and discovered project directories
 - Writes only when you use an editing, move, delete, restore, export, backup, or harness-control action
 - Runs an HTTP server bound to `127.0.0.1` (default port 3847) and rejects non-local browser requests
 

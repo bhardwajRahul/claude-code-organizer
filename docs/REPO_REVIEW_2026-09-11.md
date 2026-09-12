@@ -17,7 +17,7 @@ Official harness UIs now expose more of their own skills and plugins, so a singl
 - Last source commit before this review: 2026-06-06 (3 months 5 days).
 - Latest npm release: 0.19.3 on 2026-04-28 (4 months 14 days).
 - Baseline tests before changes: 132 unit and 121 E2E.
-- Current tests after changes: 174 unit and 212 E2E, 386 total.
+- Current tests after changes: 175 unit and 212 E2E, 387 total.
 - Dependency audit before changes: 8 advisories (4 high, 3 moderate, 1 low).
 - Dependency audit after changes: 0 advisories.
 - Package dry run excludes local experimental `session-distiller-v2` through `v5` files.
