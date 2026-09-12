@@ -10,7 +10,7 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-396%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-397%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
 [![Telemetry: Explicit Opt-in](https://img.shields.io/badge/telemetry-explicit%20opt--in-blue)](PRIVACY.md)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [![Activation Scanner](https://img.shields.io/badge/Activation-Scanner%20Preview-purple)](research/README.md)
@@ -409,7 +409,7 @@ MIT
 - Added full in-dashboard Markdown editing with conflict-safe serialized frontmatter saves
 - Rebuilt Session Distiller with exact backups, fresh UUIDs, a valid resume chain, and harness gating
 - Hardened the local server with a restrictive CSP, dependency-free safe Markdown rendering, race-resistant file reads, modernized MCP tool annotations, and updated dependencies
-- Added regression coverage; 396 tests pass (181 unit + 215 E2E)
+- Added regression coverage; 397 tests pass (182 unit + 215 E2E)
 
 ### 2026-04-28
 - v0.19.3: Fixed Claude Code preview loading for markdown-backed skills, memories, and agents when the markdown renderer fails

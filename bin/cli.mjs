@@ -136,7 +136,7 @@ if (isDistillMode) {
 } else {
   // Web dashboard mode — human opens browser
   const { startServer } = await import('../src/server.mjs');
-  const { execSync } = await import('node:child_process');
+  const { execFileSync } = await import('node:child_process');
 
   const portIdx = args.indexOf('--port');
   const port = portIdx !== -1 ? parseInt(args[portIdx + 1], 10) : 3847;
@@ -144,7 +144,7 @@ if (isDistillMode) {
   // Check for update in background (don't block server start)
   const updatePromise = checkForUpdate();
 
-  startServer(port);
+  const server = startServer(port);
 
   // Show update notice after server starts (CLI users)
   updatePromise.then(update => {
@@ -156,11 +156,20 @@ if (isDistillMode) {
   });
 
   if (!args.includes('--no-open') && process.env.CCO_NO_OPEN !== '1') {
-    try {
-      const openCmd = process.platform === 'darwin' ? 'open' : 'xdg-open';
-      execSync(`${openCmd} http://localhost:${port}`, { stdio: 'ignore' });
-    } catch {
-      // Browser didn't open, user can navigate manually
-    }
+    server.once('listening', () => {
+      const address = server.address();
+      const actualPort = typeof address === 'object' && address ? address.port : port;
+      const dashboardUrl = `http://localhost:${actualPort}`;
+      try {
+        if (process.platform === 'win32') {
+          execFileSync('cmd.exe', ['/d', '/s', '/c', 'start', '', dashboardUrl], { stdio: 'ignore' });
+        } else {
+          const openCmd = process.platform === 'darwin' ? 'open' : 'xdg-open';
+          execFileSync(openCmd, [dashboardUrl], { stdio: 'ignore' });
+        }
+      } catch {
+        // Browser didn't open, user can navigate to the printed URL manually.
+      }
+    });
   }
 }

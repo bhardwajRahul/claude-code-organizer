@@ -1593,18 +1593,22 @@ export function startServer(port = 3847, maxRetries = 10) {
   });
 
   let attempt = 0;
+  server.once("listening", () => {
+    const address = server.address();
+    const activePort = typeof address === "object" && address ? address.port : port + attempt;
+    console.log(`\nCross-Code Organizer (CCO) running at http://localhost:${activePort}\n`);
+    console.log(`Made by a CS dropout with no mass, no team, no budget \u2014 just Claude Code and ADHD.`);
+    console.log(`This is my first open-source project. If it helped you, a star would make my week:`);
+    console.log(`\u2B50 https://github.com/mcpware/cross-code-organizer`);
+    console.log(`\uD83D\uDCEC Bugs, ideas, or just wanna say hi? https://github.com/mcpware/cross-code-organizer/issues`);
+    console.log(`\nPress Ctrl+C to stop. Server auto-shuts down when you close all browser tabs.\n`);
+    startIdleTimer(); // safety net in case no browser connects
+    // Non-blocking update check
+    checkForUpdate().catch(() => {});
+  });
+
   function tryListen(p) {
-    server.listen(p, "127.0.0.1", () => {
-      console.log(`\nCross-Code Organizer (CCO) running at http://localhost:${p}\n`);
-      console.log(`Made by a CS dropout with no mass, no team, no budget \u2014 just Claude Code and ADHD.`);
-      console.log(`This is my first open-source project. If it helped you, a star would make my week:`);
-      console.log(`\u2B50 https://github.com/mcpware/cross-code-organizer`);
-      console.log(`\uD83D\uDCEC Bugs, ideas, or just wanna say hi? https://github.com/mcpware/cross-code-organizer/issues`);
-      console.log(`\nPress Ctrl+C to stop. Server auto-shuts down when you close all browser tabs.\n`);
-      startIdleTimer(); // safety net in case no browser connects
-      // Non-blocking update check
-      checkForUpdate().catch(() => {});
-    });
+    server.listen(p, "127.0.0.1");
   }
 
   server.on("error", (err) => {

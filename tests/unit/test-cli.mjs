@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { access, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -131,6 +132,79 @@ describe('CLI informational flags', () => {
         child.kill('SIGTERM');
         await exited;
       }
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it('opens the actual fallback port after the dashboard starts listening', { skip: process.platform === 'win32' }, async () => {
+    const home = await mkdtemp(join(tmpdir(), 'cco-cli-home-'));
+    const fakeBin = join(home, 'bin');
+    const capturePath = join(home, 'opened-url.txt');
+    const openCommand = process.platform === 'darwin' ? 'open' : 'xdg-open';
+    const openCommandPath = join(fakeBin, openCommand);
+    await mkdir(fakeBin, { recursive: true });
+    await writeFile(openCommandPath, [
+      '#!/usr/bin/env node',
+      'const { writeFileSync } = require("node:fs");',
+      'writeFileSync(process.env.CCO_OPEN_CAPTURE, process.argv[2]);',
+      '',
+    ].join('\n'));
+    await chmod(openCommandPath, 0o755);
+
+    const blocker = createServer();
+    await new Promise((resolve, reject) => {
+      blocker.once('error', reject);
+      blocker.listen(0, '127.0.0.1', resolve);
+    });
+    const busyPort = blocker.address().port;
+    const child = spawn(process.execPath, [cliPath, '--port', String(busyPort)], {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        CCO_OPEN_CAPTURE: capturePath,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    let boundPort = null;
+
+    try {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error(`CLI did not use a fallback port; stderr: ${stderr}`)), 5000);
+        child.stderr.on('data', chunk => { stderr += chunk; });
+        child.stdout.on('data', chunk => {
+          stdout += chunk;
+          const match = stdout.match(/running at http:\/\/localhost:(\d+)/);
+          if (match) {
+            boundPort = Number(match[1]);
+            clearTimeout(timeout);
+            resolve();
+          }
+        });
+        child.once('error', error => {
+          clearTimeout(timeout);
+          reject(error);
+        });
+      });
+
+      let openedUrl = '';
+      for (let attempt = 0; attempt < 20 && !openedUrl; attempt++) {
+        try { openedUrl = await readFile(capturePath, 'utf8'); } catch {}
+        if (!openedUrl) await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      assert.notEqual(boundPort, busyPort);
+      assert.equal(openedUrl, `http://localhost:${boundPort}`);
+      assert.equal(stderr, '');
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) {
+        const exited = once(child, 'exit');
+        child.kill('SIGTERM');
+        await exited;
+      }
+      await new Promise(resolve => blocker.close(resolve));
       await rm(home, { recursive: true, force: true });
     }
   });
