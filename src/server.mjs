@@ -36,6 +36,7 @@ import {
   getPrivacyMetricsStatus,
   recordPrivacyMetric,
   setPrivacyMetricsEnabled,
+  submitMonthlyActiveSignal,
 } from "./privacy-metrics.mjs";
 import { isNewerVersion } from "./version.mjs";
 
@@ -446,6 +447,9 @@ async function handleRequest(req, res) {
   // GET /api/scan — full scan of all customizations
   if (path === "/api/scan" && req.method === "GET") {
     const data = await freshScan();
+    const require = createRequire(import.meta.url);
+    const { version } = require("../package.json");
+    submitMonthlyActiveSignal(HOME, version, activeAdapter.id).catch(() => {});
     return json(res, data);
   }
 
@@ -609,14 +613,20 @@ async function handleRequest(req, res) {
     }
   }
 
-  // GET/POST /api/privacy-metrics — explicit local-only metrics consent
+  // GET/POST /api/privacy-metrics — explicit anonymous metrics consent
   if (path === "/api/privacy-metrics" && req.method === "GET") {
     return json(res, { ok: true, ...(await getPrivacyMetricsStatus(HOME)) });
   }
   if (path === "/api/privacy-metrics" && req.method === "POST") {
     const { enabled } = await readBody(req);
     if (typeof enabled !== "boolean") return json(res, { ok: false, error: "enabled must be a boolean" }, 400);
-    return json(res, { ok: true, ...(await setPrivacyMetricsEnabled(HOME, enabled)) });
+    await setPrivacyMetricsEnabled(HOME, enabled);
+    if (enabled) {
+      const require = createRequire(import.meta.url);
+      const { version } = require("../package.json");
+      await submitMonthlyActiveSignal(HOME, version, activeAdapter.id).catch(() => {});
+    }
+    return json(res, { ok: true, ...(await getPrivacyMetricsStatus(HOME)) });
   }
 
   // GET /api/context-budget?scope=<id> — token budget breakdown for a scope

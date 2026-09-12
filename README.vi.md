@@ -8,8 +8,8 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-358%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
-[![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-365%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Telemetry: Explicit Opt-in](https://img.shields.io/badge/telemetry-explicit%20opt--in-blue)](PRIVACY.md)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [廣東話](README.zh-HK.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Bahasa Indonesia](README.id.md) | [Italiano](README.it.md) | [Português](README.pt-BR.md) | [Türkçe](README.tr.md) | Tiếng Việt | [ไทย](README.th.md)
 
@@ -23,11 +23,11 @@ Rename alias để tìm kiếm: project này trước đây là **Claude Code Or
 
 > **v0.19.3:** Preview cho skills / memories / agents giờ dùng markdown-backed preview và fallback an toàn nếu markdown renderer lỗi. Claude project discovery xử lý path non-ASCII / lossy encoded và thư mục symlink. Skills do Claude plugin cung cấp cũng được scan trong user / project scope.
 
-> **Privacy:** CCO chỉ đọc file config của harness đang chọn (`~/.claude/`, `~/.codex/` và config project). Không gửi usage telemetry.
+> **Privacy:** Anonymous metrics tắt mặc định. Nếu bạn bật, CCO gửi một signal hằng tháng đã được khử trùng lặp: tháng UTC, anonymous ID thay đổi hàng tháng, phiên bản CCO và harness ID. Không bao giờ gửi path, tên, prompt, nội dung file, session hay credential. Xem [PRIVACY.md](PRIVACY.md).
 
 ![Cross-Code Organizer (CCO) Demo](docs/demo.gif)
 
-<sub>358 tests (147 unit + 211 E2E) | Zero telemetry | Demo do AI tự quay bằng [Pagecast](https://github.com/mcpware/pagecast)</sub>
+<sub>Telemetry explicit opt-in | Không upload config hoặc content | Demo do AI tự quay bằng [Pagecast](https://github.com/mcpware/pagecast)</sub>
 
 > 100+ stars trong 5 ngày. Tác giả bỏ học CS, tình cờ phát hiện 140 file config ẩn đang điều khiển Claude rồi nghĩ — không ai nên phải ngồi `cat` từng file một. Đây là project open source đầu tay — cảm ơn mọi người đã star, test, và report bug.
 

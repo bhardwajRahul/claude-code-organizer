@@ -10,8 +10,8 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-358%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
-[![Zero Outbound Telemetry](https://img.shields.io/badge/outbound%20telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-365%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Telemetry: Explicit Opt-in](https://img.shields.io/badge/telemetry-explicit%20opt--in-blue)](PRIVACY.md)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [![Activation Scanner](https://img.shields.io/badge/Activation-Scanner%20Preview-purple)](research/README.md)
 [![Awesome MCP](https://img.shields.io/badge/Awesome-MCP%20Servers-fc60a8?logo=awesomelists&logoColor=white)](https://github.com/punkpeye/awesome-mcp-servers)
@@ -28,15 +28,15 @@ CCO gives you cross-harness visibility. Claude Code has memories, skills, agents
 
 > **v0.19.3** — Claude Code previews now survive markdown renderer failures, plugin-provided skills are scanned, and project discovery handles non-ASCII paths, lossy encoded paths, and symlinked directories.
 
-> **v0.20.0** — Adds Harness Doctor with an Effective Context Map, explainable hygiene score, reversible exact-duplicate repair, copy-only skill migration, and optional local-only metrics. Also adds OpenCode inventory, full Markdown editing, a resumable Session Distiller repair, local-server hardening, and dependency security updates.
+> **v0.20.0** — Adds Harness Doctor with an Effective Context Map, explainable hygiene score, reversible exact-duplicate repair, copy-only skill migration, and optional anonymous monthly metrics. Also adds OpenCode inventory, full Markdown editing, a resumable Session Distiller repair, local-server hardening, and dependency security updates.
 
 > Scan for poisoned MCP servers. Reclaim wasted context tokens. Disable MCP servers per-project. Find and delete duplicate memories. Move misplaced configs where they belong.
 
-> **Privacy:** CCO reads selected harness config files on your machine (`~/.claude/`, `~/.codex/`, and project-level config). Optional usage metrics are disabled by default, aggregated locally under `~/.cco/`, and never uploaded. CCO checks the npm registry for version updates unless network access is blocked.
+> **Privacy:** CCO reads selected harness config files on your machine (`~/.claude/`, `~/.codex/`, and project-level config). Anonymous metrics require explicit opt-in. When enabled, detailed event totals stay local under `~/.cco/`; CCO submits a deduplicated monthly signal containing only a rotating anonymous ID, UTC month, app version, and harness ID. It never sends paths, names, prompts, file contents, sessions, or credentials. See [PRIVACY.md](PRIVACY.md).
 
 ![Cross-Code Organizer (CCO) Demo](docs/demo.gif)
 
-<sub>358 tests (147 unit + 211 E2E) | Zero outbound telemetry | Demo recorded by AI using [Pagecast](https://github.com/mcpware/pagecast)</sub>
+<sub>Explicit opt-in telemetry | No config or content upload | Demo recorded by AI using [Pagecast](https://github.com/mcpware/pagecast)</sub>
 
 > 100+ stars in 5 days. Built by a CS dropout who found 140 invisible config files controlling AI coding tools and decided no one should have to `cat` each one. First open source project — thank you to everyone who starred, tested, and reported issues.
 
@@ -112,7 +112,7 @@ Open **Harness Doctor** from the sidebar for a scope-level audit:
 - **Explainable hygiene score** — every deduction is tied to a visible finding such as duplicate identities, missing discovery metadata, large context-bearing files, stale sessions, or setting overrides. It is a diagnostic heuristic, not a security certification.
 - **Safe auto-repair** — only byte-identical artifacts with the same name, category, and scope are eligible. CCO archives the extra copy, fingerprints it, and provides Undo.
 - **Cross-harness migration** — v1 copies portable `SKILL.md` bundles between Claude Code, Codex CLI, and OpenCode. It previews ready, conflicting, identical, and unsupported items and never overwrites by default.
-- **Private product signals** — optional metrics are off by default and remain local. They store only daily event counts, harness IDs, and coarse inventory buckets—never paths, names, prompts, file contents, or credentials. No upload endpoint exists.
+- **Private product signals** — optional metrics are off by default. Detailed daily event counts and coarse inventory buckets stay local. If enabled, CCO submits a deduplicated monthly activity signal containing only a rotating anonymous ID, UTC month, CCO version, and harness ID. The identifier changes every month, so it cannot build cross-month user histories.
 
 ## Context Budget: See How Many Tokens Claude Code Pre-Loads
 
@@ -366,7 +366,7 @@ CCO scans the selected harness and discovers projects automatically. The scope l
 
 ### Does CCO send my data anywhere?
 
-No config, prompt, session, path, or usage record is uploaded. Optional privacy metrics are disabled by default and, if enabled, stay as daily aggregates in `~/.cco/privacy-metrics.json`; there is no upload endpoint. Network access is limited to connecting to your locally configured MCP servers during security scans and checking npm for version updates.
+CCO never uploads config, prompts, sessions, paths, file names, skill names, file contents, or credentials. Optional anonymous metrics are disabled by default. If you explicitly enable them in Harness Doctor, detailed daily event aggregates remain in `~/.cco/privacy-metrics.json`, while a deduplicated monthly activity signal is submitted to CCO's first-party Cloudflare Worker. The signal contains only the UTC month, a monthly rotating anonymous ID, CCO version, and selected harness ID. Delivery retries may retransmit the identical signal without increasing the count. See [PRIVACY.md](PRIVACY.md) for the exact schema and endpoint.
 
 ### How is CCO different from standalone MCP scanners?
 
@@ -400,11 +400,11 @@ MIT
 ### 2026-09-11
 - v0.20.0: Added inventory-first OpenCode support and expanded Codex inventory
 - Added Harness Doctor: Effective Context Map, explainable hygiene scoring, reversible exact-duplicate repair, and copy-only cross-harness skill migration
-- Added disabled-by-default local aggregate metrics with a fixed allowlist and no upload path
+- Added disabled-by-default anonymous monthly active-install metrics; detailed event aggregates remain local
 - Added full in-dashboard Markdown editing with conflict-safe serialized frontmatter saves
 - Rebuilt Session Distiller with exact backups, fresh UUIDs, a valid resume chain, and harness gating
 - Hardened the local server, modernized MCP tool annotations, and updated dependencies
-- Added regression coverage; 358 tests pass (147 unit + 211 E2E)
+- Added regression coverage; 365 tests pass (154 unit + 211 E2E)
 
 ### 2026-04-28
 - v0.19.3: Fixed Claude Code preview loading for markdown-backed skills, memories, and agents when the markdown renderer fails

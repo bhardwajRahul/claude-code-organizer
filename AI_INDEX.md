@@ -104,6 +104,18 @@
 - Search: `backup`, `restore`
 - Note: Code exists but is not called by runtime. Treat as dormant.
 
+### Privacy metrics
+- Client state: `src/privacy-metrics.mjs`
+- Collector: `infra/metrics-worker/src/index.js`
+- D1 schema: `infra/metrics-worker/migrations/`
+- Monthly reports: `infra/metrics-worker/queries/monthly-matrix.sql`
+- Search: `submitMonthlyActiveSignal`, `cco-mau-v1`, `monthly_active_users`
+- Behavior: disabled by default; detailed event aggregates stay local; opted-in installs submit one deduplicated rotating anonymous activity identity per UTC month, with identical-payload retries after delivery failure
+- Connects to:
+  - Server startup and consent route — `src/server.mjs`
+  - Harness Doctor consent UI — `src/ui/app.js`, `src/ui/index.html`
+  - First-party Cloudflare Worker + D1 — deduplicates `(month, monthly_id)`
+
 ---
 
 ## Frontend
@@ -158,6 +170,8 @@
 - `test-trim-images.mjs` — image block redaction in sessions
 - `test-codex-adapter.mjs` — Codex CLI inventory and scope behavior
 - `test-opencode-adapter.mjs` — OpenCode config, instruction, skill, MCP, and plugin discovery
+- `test-control-plane.mjs` — local privacy metrics and monthly signal behavior
+- `test-metrics-worker.mjs` — collector validation, strict schema, and D1 writes
 
 ### E2E tests
 - Path: `tests/e2e/`

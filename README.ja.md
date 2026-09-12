@@ -8,8 +8,8 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-358%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
-[![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-365%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Telemetry: Explicit Opt-in](https://img.shields.io/badge/telemetry-explicit%20opt--in-blue)](PRIVACY.md)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [廣東話](README.zh-HK.md) | 日本語 | [한국어](README.ko.md) | [Español](README.es.md) | [Bahasa Indonesia](README.id.md) | [Italiano](README.it.md) | [Português](README.pt-BR.md) | [Türkçe](README.tr.md) | [Tiếng Việt](README.vi.md) | [ไทย](README.th.md)
 
@@ -23,11 +23,11 @@ CCO は Claude Code の memories、skills、agents、hooks、context budget と�
 
 > **v0.19.3：** skills / memories / agents の preview が markdown-backed になり、renderer が失敗しても安全に fallback する。Claude project discovery は non-ASCII / lossy encoded path と symlinked directory に対応。Claude plugin が提供する skills も user / project scope で scan する。
 
-> **プライバシー：** CCO が読むのは選択中 harness の config ファイル（`~/.claude/`、`~/.codex/`、project config）だけ。usage telemetry は送信しない。
+> **プライバシー：** 匿名 metrics はデフォルトで無効です。有効にした場合のみ、UTC 月、毎月変わる匿名 ID、CCO version、harness ID を含む重複排除される月次シグナルを送信します。path、名前、prompt、file content、session、credential は送信しません。詳細は [PRIVACY.md](PRIVACY.md)。
 
 ![Cross-Code Organizer (CCO) Demo](docs/demo.gif)
 
-<sub>358 tests（147 unit + 211 E2E） | Zero telemetry | デモは AI が [Pagecast](https://github.com/mcpware/pagecast) で録画</sub>
+<sub>明示的 opt-in telemetry | config/content の upload なし | デモは AI が [Pagecast](https://github.com/mcpware/pagecast) で録画</sub>
 
 > 5日で100 star 超え。CSを中退したエンジニアが、Claude の裏側で動いてる140個の設定ファイルを見つけて、「これ全部 `cat` で開くのはさすがにしんどい」と思って作った。初 OSS です。star、テスト、issue 報告してくれた方々、ほんとうにありがとうございます。
 

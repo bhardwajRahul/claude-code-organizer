@@ -14,10 +14,12 @@ import {
   undoControlPlaneTransaction,
 } from "../../src/control-plane-operations.mjs";
 import {
+  buildMonthlyActiveSignal,
   getPrivacyMetricsStatus,
   metricsPath,
   recordPrivacyMetric,
   setPrivacyMetricsEnabled,
+  submitMonthlyActiveSignal,
 } from "../../src/privacy-metrics.mjs";
 import { isNewerVersion } from "../../src/version.mjs";
 
@@ -240,7 +242,7 @@ describe("reversible repair and skill migration", () => {
 });
 
 describe("privacy metrics", () => {
-  it("is opt-in, local-only, allowlisted, and keeps its secret private", async () => {
+  it("is opt-in, allowlisted, and keeps detailed events and its secret private", async () => {
     const home = await mkdtemp(join(tmpdir(), "cco-metrics-"));
     try {
       assert.equal((await getPrivacyMetricsStatus(home)).enabled, false);
@@ -252,7 +254,8 @@ describe("privacy metrics", () => {
       assert.equal(await recordPrivacyMetric(home, "arbitrary-event", "claude"), false);
       const status = await getPrivacyMetricsStatus(home);
       assert.equal(status.enabled, true);
-      assert.equal(status.localOnly, true);
+      assert.equal(status.localDetailsOnly, true);
+      assert.equal(status.monthlySignalShared, true);
       assert.equal(status.sharePreview.inventoryBucket, "21-50");
       assert.equal(status.sharePreview.events.doctor_open, 1);
       assert.equal("secret" in status, false);
@@ -264,9 +267,115 @@ describe("privacy metrics", () => {
       ));
       assert.equal((await getPrivacyMetricsStatus(home)).sharePreview.events.doctor_open, 11);
 
-      await writeFile(metricsPath(home), JSON.stringify({ enabled: true, secret: "local-test", days: null }));
+      await writeFile(metricsPath(home), JSON.stringify({
+        version: 2,
+        enabled: true,
+        consentVersion: "cco-mau-v1",
+        secret: "local-test",
+        days: null,
+      }));
       assert.equal(await recordPrivacyMetric(home, "doctor_open", "claude"), true);
       assert.equal((await getPrivacyMetricsStatus(home)).sharePreview.events.doctor_open, 1);
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it("does not reinterpret legacy local-only consent as upload consent", async () => {
+    const home = await mkdtemp(join(tmpdir(), "cco-legacy-metrics-"));
+    try {
+      await mkdir(join(home, ".cco"), { recursive: true });
+      const retainedDate = new Date();
+      retainedDate.setUTCDate(retainedDate.getUTCDate() - 1);
+      const expiredDate = new Date();
+      expiredDate.setUTCDate(expiredDate.getUTCDate() - 31);
+      const retainedDay = retainedDate.toISOString().slice(0, 10);
+      const expiredDay = expiredDate.toISOString().slice(0, 10);
+      await writeFile(metricsPath(home), JSON.stringify({
+        version: 1,
+        enabled: true,
+        secret: "legacy-local-secret",
+        days: {
+          [expiredDay]: { events: { doctor_open: 1 }, harnesses: { claude: 1 }, inventoryBucket: null },
+          [retainedDay]: { events: { doctor_open: 1 }, harnesses: { claude: 1 }, inventoryBucket: null },
+        },
+      }));
+      const status = await getPrivacyMetricsStatus(home);
+      assert.equal(status.enabled, false);
+      assert.equal(status.monthlySignalShared, false);
+      assert.equal(await recordPrivacyMetric(home, "doctor_open", "claude"), false);
+      const retainedState = JSON.parse(await readFile(metricsPath(home), "utf8"));
+      assert.equal(expiredDay in retainedState.days, false);
+      assert.equal(retainedDay in retainedState.days, true);
+      assert.equal(
+        (await submitMonthlyActiveSignal(home, "0.20.0", "claude", { fetchImpl: async () => assert.fail("must not send") })).reason,
+        "disabled",
+      );
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it("builds a minimal identifier that is stable within a month and rotates next month", () => {
+    const state = { secret: "test-secret" };
+    const september = buildMonthlyActiveSignal(state, "0.20.0", "claude", new Date("2026-09-01T00:00:00Z"));
+    const septemberAgain = buildMonthlyActiveSignal(state, "0.20.0", "claude", new Date("2026-09-30T23:59:59Z"));
+    const october = buildMonthlyActiveSignal(state, "0.20.0", "claude", new Date("2026-10-01T00:00:00Z"));
+    const unknownHarness = buildMonthlyActiveSignal(state, "0.20.0", "not-a-harness", new Date("2026-10-01T00:00:00Z"));
+
+    assert.deepEqual(Object.keys(september), ["schema", "month", "monthlyId", "version", "harness"]);
+    assert.match(september.monthlyId, /^[a-f0-9]{32}$/);
+    assert.equal(september.monthlyId, septemberAgain.monthlyId);
+    assert.notEqual(september.monthlyId, october.monthlyId);
+    assert.equal(unknownHarness.harness, "unknown");
+  });
+
+  it("does not resubmit after monthly delivery succeeds and never sends local event details", async () => {
+    const home = await mkdtemp(join(tmpdir(), "cco-mau-"));
+    const payloads = [];
+    const fetchImpl = async (_url, options) => {
+      payloads.push(JSON.parse(options.body));
+      return { ok: true };
+    };
+    try {
+      assert.deepEqual(
+        await submitMonthlyActiveSignal(home, "0.20.0", "claude", { fetchImpl, now: new Date("2026-09-11T12:00:00Z") }),
+        { sent: false, reason: "disabled" },
+      );
+
+      await setPrivacyMetricsEnabled(home, true);
+      await recordPrivacyMetric(home, "doctor_open", "claude", { inventoryCount: 37 });
+      const first = await submitMonthlyActiveSignal(home, "0.20.0", "claude", { fetchImpl, now: new Date("2026-09-11T12:00:00Z") });
+      const duplicate = await submitMonthlyActiveSignal(home, "0.20.0", "claude", { fetchImpl, now: new Date("2026-09-30T12:00:00Z") });
+      const nextMonth = await submitMonthlyActiveSignal(home, "0.20.0", "codex", { fetchImpl, now: new Date("2026-10-01T12:00:00Z") });
+
+      assert.equal(first.sent, true);
+      assert.equal(duplicate.reason, "already-submitted");
+      assert.equal(nextMonth.sent, true);
+      assert.equal(payloads.length, 2);
+      assert.equal("events" in payloads[0], false);
+      assert.equal("inventoryBucket" in payloads[0], false);
+      assert.equal(payloads[1].harness, "codex");
+      assert.equal((await getPrivacyMetricsStatus(home)).lastSubmittedMonth, "2026-10");
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it("throttles failed submissions before retrying", async () => {
+    const home = await mkdtemp(join(tmpdir(), "cco-mau-retry-"));
+    let attempts = 0;
+    const fetchImpl = async () => {
+      attempts += 1;
+      return { ok: false };
+    };
+    try {
+      await setPrivacyMetricsEnabled(home, true);
+      const failed = await submitMonthlyActiveSignal(home, "0.20.0", "claude", { fetchImpl, now: new Date("2026-09-11T12:00:00Z") });
+      const throttled = await submitMonthlyActiveSignal(home, "0.20.0", "claude", { fetchImpl, now: new Date("2026-09-11T13:00:00Z") });
+      assert.equal(failed.reason, "server-rejected");
+      assert.equal(throttled.reason, "retry-later");
+      assert.equal(attempts, 1);
     } finally {
       await rm(home, { recursive: true, force: true });
     }

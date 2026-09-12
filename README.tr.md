@@ -8,8 +8,8 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-358%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
-[![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-365%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Telemetry: Explicit Opt-in](https://img.shields.io/badge/telemetry-explicit%20opt--in-blue)](PRIVACY.md)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [廣東話](README.zh-HK.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Bahasa Indonesia](README.id.md) | [Italiano](README.it.md) | [Português](README.pt-BR.md) | Türkçe | [Tiếng Việt](README.vi.md) | [ไทย](README.th.md)
 
@@ -23,11 +23,11 @@ CCO cross-harness görünürlük sağlar. Claude Code'da memories, skills, agent
 
 > Zehirli MCP server'ları tara. Boşa giden context token'larını geri al. MCP server'ları proje bazında disable et. Duplicate memory'leri bulup sil. Yanlış yerdeki config'leri ait oldukları yere taşı.
 
-> **Gizlilik:** CCO sadece makindeki seçili harness config dosyalarını okur (`~/.claude/`, `~/.codex/` ve project config). Usage telemetry göndermez. Network erişimi engellenmediyse version update kontrolü için npm registry'yi sorgular.
+> **Gizlilik:** Anonim metrics varsayılan olarak kapalıdır. Açarsanız CCO yalnızca UTC ayı, aylık değişen anonim ID, CCO sürümü ve harness ID içeren tekilleştirilmiş aylık sinyal gönderir. Path, ad, prompt, dosya içeriği, session veya credential göndermez. Ayrıntılar: [PRIVACY.md](PRIVACY.md).
 
 ![Cross-Code Organizer (CCO) Demo](docs/demo.gif)
 
-<sub>358 test (147 unit + 211 E2E) | Sıfır telemetry | Demo'yu AI kaydetmiş, [Pagecast](https://github.com/mcpware/pagecast) ile</sub>
+<sub>Açık opt-in telemetry | Config/content upload yok | Demo'yu AI kaydetmiş, [Pagecast](https://github.com/mcpware/pagecast) ile</sub>
 
 > 5 günde 100+ star aldık. AI coding tool'larını yöneten 140 tane görünmez config dosyası buldum, "kimse bunları tek tek `cat`'lemesin" dedim ve yazdım. CS bölümünü yarıda bıraktım, bu ilk open source projem. Star atan, test eden, issue açan herkese teşekkürler.
 

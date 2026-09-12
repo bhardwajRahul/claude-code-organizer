@@ -8,8 +8,8 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-358%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
-[![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-365%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Telemetry: Explicit Opt-in](https://img.shields.io/badge/telemetry-explicit%20opt--in-blue)](PRIVACY.md)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [English](README.md) | 简体中文 | [繁體中文](README.zh-TW.md) | [廣東話](README.zh-HK.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Bahasa Indonesia](README.id.md) | [Italiano](README.it.md) | [Português](README.pt-BR.md) | [Türkçe](README.tr.md) | [Tiếng Việt](README.vi.md) | [ไทย](README.th.md)
 
@@ -23,11 +23,11 @@ CCO 提供 cross-harness visibility：Claude Code harness 有 memories、skills�
 
 > **v0.19.0：** Codex CLI 正式成为第二个 supported harness。之后会加 Cursor、Windsurf、Aider。
 
-> **隐私：** CCO 只读取你本机所选 harness 的 config 文件（`~/.claude/`、`~/.codex/` 和 project 层面）。不会发送 usage telemetry。除非网络被阻止，它会查询 npm registry 检查版本更新。
+> **隐私：** 匿名 metrics 默认关闭。只有你主动开启后，CCO 才会发送去重的每月信号：UTC 月份、每月轮换的匿名 ID、CCO 版本和 harness ID。不会发送路径、名称、prompt、文件内容、session 或凭据。详见 [PRIVACY.md](PRIVACY.md)。
 
 ![Cross-Code Organizer (CCO) Demo](docs/demo.gif)
 
-<sub>358 个 test（147 unit + 211 E2E）| 零 telemetry | Demo 由 AI 用 [Pagecast](https://github.com/mcpware/pagecast) 录制</sub>
+<sub>明确 opt-in telemetry | 不上传 config 或内容 | Demo 由 AI 用 [Pagecast](https://github.com/mcpware/pagecast) 录制</sub>
 
 > 5 天过 100 颗星。一个 CS dropout 发现有 140 个隐形 config 文件在控制 Claude，心想总不能一个一个 `cat`？于是做了这个工具。第一个 open source project — 感谢每一位给星、帮忙测试、提交 bug 的朋友。
 

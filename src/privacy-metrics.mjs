@@ -1,11 +1,12 @@
 /**
  * Privacy-preserving usage metrics.
  *
- * Metrics are disabled by default and stored locally. The schema cannot accept
- * paths, names, prompts, file contents, or arbitrary event properties. A
- * share preview uses a day-scoped pseudonym that changes every UTC day; CCO
- * does not upload it unless a future release adds an explicit endpoint and a
- * separate opt-in flow.
+ * Metrics are disabled by default. Detailed event aggregates stay local, and
+ * an enabled installation submits one deduplicated activity identity per UTC
+ * month. Delivery retries can retransmit the same payload. The schema cannot
+ * accept paths, names, prompts, file contents, or
+ * arbitrary event properties. The pseudonym changes every month, preventing
+ * cross-month tracking while still allowing a monthly active-install count.
  */
 
 import { createHmac, randomBytes } from "node:crypto";
@@ -23,18 +24,27 @@ const ALLOWED_EVENTS = new Set([
 
 const ALLOWED_HARNESSES = new Set(["claude", "codex", "opencode", "unknown"]);
 const stateQueues = new Map();
+export const DEFAULT_METRICS_ENDPOINT = "https://cco-metrics-api.keungkawai5.workers.dev/v1/mau";
+const ACTIVE_CONSENT_VERSION = "cco-mau-v1";
+const RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
 
 function dayKey(now = new Date()) {
   return now.toISOString().slice(0, 10);
 }
 
+function monthKey(now = new Date()) {
+  return now.toISOString().slice(0, 7);
+}
+
 function defaultState() {
   return {
-    version: 1,
+    version: 2,
     enabled: false,
-    localOnly: true,
+    consentVersion: null,
     createdAt: null,
     secret: null,
+    lastAttemptAt: null,
+    lastSubmittedMonth: null,
     days: {},
   };
 }
@@ -46,7 +56,7 @@ export function metricsPath(home) {
 async function readState(home) {
   try {
     const parsed = JSON.parse(await readFile(metricsPath(home), "utf8"));
-    const state = { ...defaultState(), ...parsed };
+    const state = { ...defaultState(), ...parsed, version: 2 };
     if (!state.days || typeof state.days !== "object" || Array.isArray(state.days)) state.days = {};
     return state;
   } catch {
@@ -81,26 +91,31 @@ async function withStateLock(home, operation) {
 }
 
 function publicStatus(state) {
+  const optedIn = state.enabled && state.consentVersion === ACTIVE_CONSENT_VERSION;
   return {
-    enabled: Boolean(state.enabled),
-    localOnly: true,
+    enabled: Boolean(optedIn),
+    localDetailsOnly: true,
+    monthlySignalShared: Boolean(optedIn),
+    lastSubmittedMonth: state.lastSubmittedMonth || null,
     retentionDays: 30,
     storedDays: Object.keys(state.days || {}).length,
-    collectedFields: ["UTC day", "event count", "harness id", "coarse inventory buckets"],
+    localFields: ["UTC day", "event count", "harness id", "coarse inventory buckets"],
+    sharedFields: ["UTC month", "monthly rotating anonymous id", "CCO version", "harness id"],
     neverCollected: ["paths", "file names", "skill names", "prompts", "session content", "credentials"],
   };
 }
 
 export async function getPrivacyMetricsStatus(home) {
   const state = await readState(home);
-  return { ...publicStatus(state), sharePreview: state.enabled ? buildSharePreview(state) : null };
+  const status = publicStatus(state);
+  return { ...status, sharePreview: status.enabled ? buildSharePreview(state) : null };
 }
 
 export async function setPrivacyMetricsEnabled(home, enabled) {
   return withStateLock(home, async () => {
     const state = await readState(home);
     state.enabled = Boolean(enabled);
-    state.localOnly = true;
+    state.consentVersion = enabled ? ACTIVE_CONSENT_VERSION : null;
     state.createdAt ||= new Date().toISOString();
     state.secret ||= randomBytes(32).toString("hex");
     await saveState(home, state);
@@ -121,23 +136,31 @@ function coarseBucket(value) {
 function pruneDays(state, today) {
   const cutoff = new Date(`${today}T00:00:00.000Z`);
   cutoff.setUTCDate(cutoff.getUTCDate() - 30);
+  let changed = false;
   for (const day of Object.keys(state.days || {})) {
-    if (new Date(`${day}T00:00:00.000Z`) < cutoff) delete state.days[day];
+    if (new Date(`${day}T00:00:00.000Z`) < cutoff) {
+      delete state.days[day];
+      changed = true;
+    }
   }
+  return changed;
 }
 
 export async function recordPrivacyMetric(home, event, harnessId, { inventoryCount = null } = {}) {
   if (!ALLOWED_EVENTS.has(event)) return false;
   return withStateLock(home, async () => {
     const state = await readState(home);
-    if (!state.enabled) return false;
     const day = dayKey();
+    const pruned = pruneDays(state, day);
+    if (!publicStatus(state).enabled) {
+      if (pruned) await saveState(home, state);
+      return false;
+    }
     const harness = ALLOWED_HARNESSES.has(harnessId) ? harnessId : "unknown";
     state.days[day] ||= { events: {}, harnesses: {}, inventoryBucket: null };
     state.days[day].events[event] = (state.days[day].events[event] || 0) + 1;
     state.days[day].harnesses[harness] = (state.days[day].harnesses[harness] || 0) + 1;
     if (inventoryCount !== null) state.days[day].inventoryBucket = coarseBucket(inventoryCount);
-    pruneDays(state, day);
     await saveState(home, state);
     return true;
   });
@@ -154,4 +177,68 @@ export function buildSharePreview(state, day = dayKey()) {
     harnesses: { ...bucket.harnesses },
     inventoryBucket: bucket.inventoryBucket,
   };
+}
+
+export function buildMonthlyActiveSignal(state, version, harnessId, now = new Date()) {
+  if (!state.secret) throw new Error("Missing metrics secret");
+  const month = monthKey(now);
+  const harness = ALLOWED_HARNESSES.has(harnessId) ? harnessId : "unknown";
+  return {
+    schema: "cco-mau-v1",
+    month,
+    monthlyId: createHmac("sha256", state.secret).update(`mau:${month}`).digest("hex").slice(0, 32),
+    version,
+    harness,
+  };
+}
+
+/**
+ * Submit the current month's opt-in activity signal without exposing local
+ * event details. Failures are non-fatal and retried after 24 hours.
+ */
+export async function submitMonthlyActiveSignal(home, version, harnessId, {
+  endpoint = process.env.CCO_METRICS_ENDPOINT || DEFAULT_METRICS_ENDPOINT,
+  fetchImpl = globalThis.fetch,
+  now = new Date(),
+} = {}) {
+  return withStateLock(home, async () => {
+    const state = await readState(home);
+    const pruned = pruneDays(state, dayKey(now));
+    if (!publicStatus(state).enabled) {
+      if (pruned) await saveState(home, state);
+      return { sent: false, reason: "disabled" };
+    }
+
+    const month = monthKey(now);
+    if (state.lastSubmittedMonth === month) return { sent: false, reason: "already-submitted", month };
+
+    const lastAttempt = state.lastAttemptAt ? Date.parse(state.lastAttemptAt) : NaN;
+    if (Number.isFinite(lastAttempt) && now.getTime() - lastAttempt < RETRY_AFTER_MS) {
+      return { sent: false, reason: "retry-later", month };
+    }
+
+    state.secret ||= randomBytes(32).toString("hex");
+    state.lastAttemptAt = now.toISOString();
+    await saveState(home, state);
+
+    const payload = buildMonthlyActiveSignal(state, version, harnessId, now);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    try {
+      const response = await fetchImpl(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      if (!response.ok) return { sent: false, reason: "server-rejected", month };
+      state.lastSubmittedMonth = month;
+      await saveState(home, state);
+      return { sent: true, month };
+    } catch {
+      return { sent: false, reason: "network-error", month };
+    } finally {
+      clearTimeout(timeout);
+    }
+  });
 }

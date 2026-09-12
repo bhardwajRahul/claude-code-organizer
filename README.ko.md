@@ -8,8 +8,8 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-358%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
-[![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-365%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Telemetry: Explicit Opt-in](https://img.shields.io/badge/telemetry-explicit%20opt--in-blue)](PRIVACY.md)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [廣東話](README.zh-HK.md) | [日本語](README.ja.md) | 한국어 | [Español](README.es.md) | [Bahasa Indonesia](README.id.md) | [Italiano](README.it.md) | [Português](README.pt-BR.md) | [Türkçe](README.tr.md) | [Tiếng Việt](README.vi.md) | [ไทย](README.th.md)
 
@@ -23,11 +23,11 @@ CCO는 Claude Code의 memories, skills, agents, hooks, context budget과 Codex C
 
 > **v0.19.3:** skills / memories / agents preview가 markdown-backed로 바뀌었고, markdown renderer가 실패해도 안전하게 fallback해요. Claude project discovery는 non-ASCII / lossy encoded path와 symlink directory를 처리해요. Claude plugin이 제공하는 skills도 user / project scope에서 scan해요.
 
-> **개인정보:** CCO는 선택한 harness의 config 파일만 읽어요(`~/.claude/`, `~/.codex/`, project config). usage telemetry는 보내지 않아요.
+> **개인정보:** 익명 metrics는 기본적으로 꺼져 있습니다. 직접 켠 경우에만 UTC 월, 매월 바뀌는 익명 ID, CCO 버전, harness ID가 포함된 중복 제거 월간 신호를 보냅니다. path, 이름, prompt, 파일 내용, session, credential은 보내지 않습니다. [PRIVACY.md](PRIVACY.md)를 참고하세요.
 
 ![Cross-Code Organizer (CCO) Demo](docs/demo.gif)
 
-<sub>358 tests (147 unit + 211 E2E) | Zero telemetry | 데모는 AI가 [Pagecast](https://github.com/mcpware/pagecast)로 녹화</sub>
+<sub>명시적 opt-in telemetry | config/content upload 없음 | 데모는 AI가 [Pagecast](https://github.com/mcpware/pagecast)로 녹화</sub>
 
 > 5일 만에 스타 100개 넘었어요. CS 중퇴생이 Claude 뒤에서 돌아가는 설정 파일 140개를 발견하고, "이걸 하나하나 `cat` 쳐서 보라고?" 싶어서 만든 거예요. 첫 오픈소스인데 — 스타 찍어주시고, 테스트해주시고, 이슈 올려주신 분들 정말 감사해요.
 

@@ -8,8 +8,8 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-358%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
-[![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-365%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Telemetry: Explicit Opt-in](https://img.shields.io/badge/telemetry-explicit%20opt--in-blue)](PRIVACY.md)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [廣東話](README.zh-HK.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Bahasa Indonesia](README.id.md) | [Italiano](README.it.md) | [Português](README.pt-BR.md) | [Türkçe](README.tr.md) | [Tiếng Việt](README.vi.md) | ไทย
 
@@ -23,11 +23,11 @@ Rename alias สำหรับการค้นหา: project นี้เค
 
 > **v0.19.3:** Preview ของ skills / memories / agents เปลี่ยนเป็น markdown-backed preview และ fallback อย่างปลอดภัยถ้า markdown renderer พัง. Claude project discovery รองรับ path non-ASCII / lossy encoded และ symlinked directory. Skills ที่มาจาก Claude plugin ก็ถูก scan ใน user / project scope แล้ว
 
-> **เรื่อง privacy:** CCO อ่านเฉพาะ config ของ harness ที่เลือก (`~/.claude/`, `~/.codex/` และ config ระดับ project) ไม่ส่ง usage telemetry
+> **เรื่อง privacy:** Anonymous metrics ปิดไว้โดย default หากคุณเปิดใช้ CCO จะส่งสัญญาณรายเดือนที่ขจัดข้อมูลซ้ำ: เดือน UTC, anonymous ID ที่เปลี่ยนทุกเดือน, เวอร์ชัน CCO และ harness ID โดยไม่ส่ง path, ชื่อ, prompt, เนื้อหาไฟล์, session หรือ credential ดู [PRIVACY.md](PRIVACY.md)
 
 ![Cross-Code Organizer (CCO) Demo](docs/demo.gif)
 
-<sub>358 tests (147 unit + 211 E2E) | Zero telemetry | Demo อัดด้วย AI ผ่าน [Pagecast](https://github.com/mcpware/pagecast)</sub>
+<sub>Telemetry แบบ explicit opt-in | ไม่ upload config หรือ content | Demo อัดด้วย AI ผ่าน [Pagecast](https://github.com/mcpware/pagecast)</sub>
 
 > 100+ ดาวใน 5 วัน ผมเรียน CS อยู่แล้วออกกลางคัน วันนึงไปเจอว่ามี config file มองไม่เห็น 140+ ไฟล์แอบคุม Claude อยู่เบื้องหลัง ไม่มีใครควรต้องมานั่ง `cat` ทีละไฟล์ เลยทำ tool นี้ขึ้นมา เป็น open source ตัวแรก — ขอบคุณทุกคนที่กดดาว ทดสอบ แจ้ง issue
 

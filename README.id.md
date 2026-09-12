@@ -8,8 +8,8 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-358%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
-[![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-365%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Telemetry: Explicit Opt-in](https://img.shields.io/badge/telemetry-explicit%20opt--in-blue)](PRIVACY.md)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [廣東話](README.zh-HK.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | Bahasa Indonesia | [Italiano](README.it.md) | [Português](README.pt-BR.md) | [Türkçe](README.tr.md) | [Tiếng Việt](README.vi.md) | [ไทย](README.th.md)
 
@@ -23,11 +23,11 @@ Rename alias buat search: project ini dulu dikenal sebagai **Claude Code Organiz
 
 > **v0.19.3:** Preview skills / memories / agents sekarang markdown-backed dan fallback aman kalau markdown renderer gagal. Claude project discovery sekarang handle path non-ASCII / lossy encoded dan symlinked directory. Skills dari Claude plugin juga ikut discan di user / project scope.
 
-> **Privasi:** CCO cuma baca config dari harness yang dipilih (`~/.claude/`, `~/.codex/`, dan config project). Nggak kirim usage telemetry.
+> **Privasi:** Metrics anonim mati secara default. Kalau kamu aktifkan, CCO mengirim sinyal bulanan yang dideduplikasi: bulan UTC, ID anonim yang berganti tiap bulan, versi CCO, dan ID harness. Path, nama, prompt, isi file, session, dan credential tidak pernah dikirim. Lihat [PRIVACY.md](PRIVACY.md).
 
 ![Cross-Code Organizer (CCO) Demo](docs/demo.gif)
 
-<sub>358 tests (147 unit + 211 E2E) | Zero telemetry | Demo direkam AI pake [Pagecast](https://github.com/mcpware/pagecast)</sub>
+<sub>Telemetry dengan explicit opt-in | Tanpa upload config atau content | Demo direkam AI pake [Pagecast](https://github.com/mcpware/pagecast)</sub>
 
 > 100+ stars dalam 5 hari. Dibuat sama CS dropout yang nemu 140 file config invisible yang ngontrol Claude, dan mikir "masa harus `cat` satu-satu?" Project open source pertama — makasih buat yang udah star, test, dan report bug.
 

@@ -11,6 +11,7 @@
     "!src/session-distiller-v4.mjs",
     "!src/session-distiller-v5.mjs",
     "LICENSE",
+    "PRIVACY.md",
     "README.md"
   ],
   "bin": {

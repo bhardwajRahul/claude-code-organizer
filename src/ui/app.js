@@ -179,7 +179,7 @@ const CHANGELOG = {
       "Verified byte-identical duplicates can be archived with a fingerprinted backup and safe Undo.",
       "Copy portable SKILL.md bundles between Claude Code, Codex CLI, and OpenCode with a conflict preview.",
       "OpenCode inventory, in-dashboard Markdown editing, and a rebuilt resumable Session Distiller.",
-      "Optional local aggregate metrics are off by default and are never uploaded.",
+      "Optional anonymous metrics are off by default; when enabled, CCO submits a deduplicated rotating activity signal each month.",
     ],
   },
   "0.18.0": {
@@ -4814,10 +4814,10 @@ function renderDoctorPrivacy(status) {
   const label = document.getElementById("doctorMetricsLabel");
   const detail = document.getElementById("doctorPrivacyDetail");
   checkbox.checked = Boolean(status.enabled);
-  label.textContent = status.enabled ? "Local metrics on" : "Off";
+  label.textContent = status.enabled ? "Anonymous metrics on" : "Off";
   detail.textContent = status.enabled
-    ? `${status.storedDays} day(s) stored locally. Nothing is uploaded. Never collected: ${(status.neverCollected || []).join(", ")}.`
-    : "No metrics are collected. Enabling this creates a local-only aggregate file under ~/.cco/.";
+    ? `${status.storedDays} day(s) of event totals stay local. Monthly activity last counted: ${status.lastSubmittedMonth || "pending"}. Never sent: ${(status.neverCollected || []).join(", ")}.`
+    : "No metrics are collected or shared. Enabling submits a deduplicated rotating activity signal each UTC month; detailed event totals stay under ~/.cco/.";
 }
 
 async function loadHarnessDoctor() {

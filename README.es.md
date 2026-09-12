@@ -8,8 +8,8 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-358%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
-[![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-365%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Telemetry: Explicit Opt-in](https://img.shields.io/badge/telemetry-explicit%20opt--in-blue)](PRIVACY.md)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [廣東話](README.zh-HK.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | Español | [Bahasa Indonesia](README.id.md) | [Italiano](README.it.md) | [Português](README.pt-BR.md) | [Türkçe](README.tr.md) | [Tiếng Việt](README.vi.md) | [ไทย](README.th.md)
 
@@ -23,11 +23,11 @@ CCO te da visibilidad cross-harness. Claude Code tiene memories, skills, agents,
 
 > Escanea servidores MCP envenenados. Recupera tokens de contexto desperdiciados. Desactiva MCP servers por proyecto. Encuentra y borra memories duplicadas. Mueve configs mal ubicadas a donde corresponden.
 
-> **Privacidad:** CCO solo lee los archivos de config del harness seleccionado en tu máquina (`~/.claude/`, `~/.codex/` y config de proyecto). No envía usage telemetry. Sí consulta el npm registry para buscar actualizaciones de versión, salvo que el acceso a red esté bloqueado.
+> **Privacidad:** Las métricas anónimas están desactivadas por defecto. Si las activas, CCO envía una señal mensual deduplicada: mes UTC, ID anónimo rotativo, versión de CCO e ID del harness. Nunca envía rutas, nombres, prompts, contenido de archivos, sesiones ni credenciales. Consulta [PRIVACY.md](PRIVACY.md).
 
 ![Cross-Code Organizer (CCO) Demo](docs/demo.gif)
 
-<sub>358 tests (147 unit + 211 E2E) | Zero telemetry | Demo grabado por IA con [Pagecast](https://github.com/mcpware/pagecast)</sub>
+<sub>Telemetry con opt-in explícito | Sin upload de config o contenido | Demo grabado por IA con [Pagecast](https://github.com/mcpware/pagecast)</sub>
 
 > 100+ estrellas en 5 días. Lo hizo alguien que dejó la carrera de CS a medias, descubrió 140 archivos de configuración invisibles controlando AI coding tools y decidió que nadie debería tener que hacer `cat` uno por uno. Primer proyecto open source — gracias a todos los que dieron estrella, probaron y reportaron issues.
 

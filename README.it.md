@@ -8,8 +8,8 @@
 [![GitHub forks](https://img.shields.io/github/forks/mcpware/cross-code-organizer)](https://github.com/mcpware/cross-code-organizer/network/members)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
-[![Tests](https://img.shields.io/badge/tests-358%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
-[![Zero Telemetry](https://img.shields.io/badge/telemetry-zero-blue)](https://github.com/mcpware/cross-code-organizer)
+[![Tests](https://img.shields.io/badge/tests-365%20passing-brightgreen)](https://github.com/mcpware/cross-code-organizer)
+[![Telemetry: Explicit Opt-in](https://img.shields.io/badge/telemetry-explicit%20opt--in-blue)](PRIVACY.md)
 [![MCP Security](https://img.shields.io/badge/MCP-Security%20Scanner-red)](https://github.com/mcpware/cross-code-organizer)
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [廣東話](README.zh-HK.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Bahasa Indonesia](README.id.md) | Italiano | [Português](README.pt-BR.md) | [Türkçe](README.tr.md) | [Tiếng Việt](README.vi.md) | [ไทย](README.th.md)
 
@@ -23,11 +23,11 @@ CCO ti dà visibilità cross-harness. Claude Code ha memories, skill, agent, hoo
 
 > Scansiona server MCP avvelenati. Recupera token di contesto sprecati. Disabilita server MCP per progetto. Trova e cancella memories duplicate. Sposta le config fuori posto dove devono stare.
 
-> **Privacy:** CCO legge solo i file di config dell'harness selezionato sulla tua macchina (`~/.claude/`, `~/.codex/` e config di progetto). Non invia usage telemetry. Controlla il registro npm per gli update di versione, salvo rete bloccata.
+> **Privacy:** Le metriche anonime sono disattivate per impostazione predefinita. Se le abiliti, CCO invia un segnale mensile deduplicato: mese UTC, ID anonimo a rotazione mensile, versione CCO e ID harness. Non invia mai path, nomi, prompt, contenuti, sessioni o credenziali. Vedi [PRIVACY.md](PRIVACY.md).
 
 ![Cross-Code Organizer (CCO) Demo](docs/demo.gif)
 
-<sub>358 test (147 unit + 211 E2E) | Zero telemetry | Demo registrata da AI con [Pagecast](https://github.com/mcpware/pagecast)</sub>
+<sub>Telemetry con opt-in esplicito | Nessun upload di config o contenuti | Demo registrata da AI con [Pagecast](https://github.com/mcpware/pagecast)</sub>
 
 > 100+ stelle in 5 giorni. L'ha fatto uno che ha mollato informatica a metà, dopo aver scoperto 140 file di config invisibili che pilotano AI coding tool. Nessuno dovrebbe fare `cat` su ognuno. Primo progetto open source — grazie a chi ha messo la stella, testato e aperto issue.
 
