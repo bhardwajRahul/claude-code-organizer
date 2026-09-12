@@ -9,8 +9,8 @@ Thanks for your interest in contributing! This project is maintained by [@ithiri
 git clone https://github.com/YOUR_USERNAME/cross-code-organizer.git
 cd cross-code-organizer
 
-# Install dependencies
-npm install
+# Install the locked dependencies
+npm ci
 
 # Start the dashboard (dev mode)
 npm start
@@ -27,34 +27,44 @@ npm run test:headed
 ```
 bin/cli.mjs          # Entry point (dashboard or MCP server mode)
 src/
-  scanner.mjs        # Scans ~/.claude/ for all 11 categories
-  mover.mjs          # Moves/deletes files between scopes (with undo)
-  server.mjs         # HTTP server (8 REST endpoints)
-  mcp-server.mjs     # MCP server wrapper (4 tools)
-  history.mjs        # Undo/restore mechanism
+  harness/           # Harness adapters and their declared capabilities
+  scanner.mjs        # Claude compatibility scanner
+  control-plane.mjs  # Effective context and hygiene analysis
+  server.mjs         # Local dashboard API
+  mcp-server.mjs     # MCP server wrapper
+  session-distiller.mjs # Resumable Claude session distillation
+  privacy-metrics.mjs   # Opt-in monthly active-install signal
   ui/
-    app.js           # Frontend: drag-drop, search, filters, bulk ops
+    app.js           # Dashboard interactions and editors
     index.html       # Three-panel layout
-    style.css        # All styling
+    style.css        # Dashboard styling
 tests/
+  unit/              # Node unit and regression tests
   e2e/               # Playwright E2E tests
+infra/
+  metrics-worker/    # First-party opt-in metrics collector
 ```
 
 ## How It Works
 
-1. **Scanner** reads `~/.claude/` across two scopes (Global and Project)
-2. **Server** exposes scan results via REST API
-3. **UI** renders a three-panel dashboard with drag-and-drop
-4. **Mover** handles file operations between scopes with full undo support
+1. **Harness adapters** inventory Claude Code, Codex CLI, OpenCode, and DeepSeek Harness sources.
+2. **Control plane** explains effective context and hygiene only where an adapter declares the relevant precedence rules.
+3. **Server** exposes a loopback-only dashboard API with adapter-approved file boundaries.
+4. **UI** provides inventory, Markdown editing, search, reversible repair, migration previews, and Session Distiller.
 
-### Scope Model
+### Scope model
 
-Claude Code has two active scopes:
+Harness scope and precedence rules are not interchangeable. Each adapter owns
+its roots, project discovery, capabilities, and effective-context declarations.
+Do not infer one harness's behavior from another.
+
+Claude Code includes these two common scopes:
 
 - **Global** — `~/.claude/` — applies to every session on this machine
 - **Project** — `<repo>/.claude/` — applies only to that repository
 
-All project scopes inherit directly from Global. There is no intermediate scope between them — sibling projects do not inherit from each other, and nested directory structures do not create additional inheritance layers. The sidebar tree groups projects visually by path, but this is organisational only and does not affect what Claude Code loads.
+The sidebar may group projects visually by path, but visual nesting alone must
+never be treated as inheritance.
 
 ## What to Work On
 
@@ -73,20 +83,25 @@ All project scopes inherit directly from Global. There is no intermediate scope 
 ## Code Style
 
 - Pure ES modules (`.mjs` files)
-- Zero runtime npm dependencies (only `@modelcontextprotocol/sdk`)
+- Keep runtime dependencies small and justified
 - No build step — source files run directly
 - Keep it simple — no abstractions for one-time operations
+- Treat every mutation as adapter-specific; unsupported operations stay disabled
+- Preserve loopback, origin, request-size, and adapter-approved path checks
 
 ## Testing
 
 We use Playwright for E2E tests. Tests spin up the real server and test through the browser.
 
 ```bash
-# Run all tests
+# Run unit tests
+npm run test:unit
+
+# Run all Playwright E2E tests
 npm test
 
-# Run specific test file
-npx playwright test tests/e2e/scanner.test.mjs
+# Run a specific E2E test file
+npx playwright test --config tests/e2e/playwright.config.mjs tests/e2e/dashboard.spec.mjs
 
 # Debug with headed browser
 npm run test:headed
@@ -95,8 +110,13 @@ npm run test:headed
 ## Reporting Issues
 
 - Use [GitHub Issues](https://github.com/mcpware/cross-code-organizer/issues)
-- Include your OS, Node.js version, and Claude Code version
+- Include your OS, Node.js version, selected harness, and harness version
 - For bugs, include steps to reproduce
+
+## Maintainer releases
+
+See [RELEASING.md](RELEASING.md). Releases are tag-driven and use trusted
+publishing; do not publish npm or create a GitHub Release manually.
 
 ## License
 
