@@ -6,7 +6,7 @@
 
 import { createServer } from "node:http";
 import { readFile, stat, open } from "node:fs/promises";
-import { join, extname, resolve, sep, isAbsolute } from "node:path";
+import { join, extname, resolve, isAbsolute } from "node:path";
 import { homedir } from "node:os";
 import { createRequire } from "node:module";
 import https from "node:https";
@@ -39,6 +39,7 @@ import {
   submitMonthlyActiveSignal,
 } from "./privacy-metrics.mjs";
 import { isNewerVersion } from "./version.mjs";
+import { isPathWithin, normalizedPath } from "./path-security.mjs";
 
 // ── Update check ─────────────────────────────────────────────────────
 async function checkForUpdate() {
@@ -69,22 +70,6 @@ const BACKUP_EXCLUDED_CATEGORIES = new Set(["setting", "hook", "session", "histo
 const MAX_REQUEST_BODY_BYTES = 1024 * 1024;
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 const fileWriteQueues = new Map();
-
-/**
- * Validate that a file path is within allowed directories.
- * Prevents path traversal attacks (e.g. ../../etc/passwd).
- */
-function normalizedPath(filePath) {
-  const resolved = resolve(filePath);
-  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
-}
-
-function isPathWithin(filePath, root) {
-  if (!filePath || !root || !isAbsolute(filePath) || !isAbsolute(root)) return false;
-  const candidate = normalizedPath(filePath);
-  const allowedRoot = normalizedPath(root);
-  return candidate === allowedRoot || candidate.startsWith(allowedRoot + sep);
-}
 
 function itemFilePaths(item) {
   const paths = [item?.path, item?.openPath].filter(Boolean);

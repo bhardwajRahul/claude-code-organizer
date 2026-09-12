@@ -63,6 +63,7 @@
 
 ### HTTP server
 - Entry: `src/server.mjs`
+- Cross-platform path boundary checks: `src/path-security.mjs`
 - Search: `createServer`, `/api/scan`, `/api/move`, `/api/delete`, `/api/save-markdown`, `/api/context-budget`, `/api/security-scan`, `/api/file-content`, `/api/session-preview`, `/api/export`
 - Tests: `tests/e2e/dashboard.spec.mjs`
 - Connects to:
@@ -167,6 +168,7 @@
 - `test-effective-rules.mjs` — effective mode logic
 - `test-move-destinations.mjs` — mover destination validation
 - `test-path-correctness.mjs` — scope path decoding
+- `test-path-security.mjs` — Windows/POSIX allowlist boundaries, drives, casing, and UNC paths
 - `test-security-features.mjs` — security scanner patterns
 - `test-trim-images.mjs` — image block redaction in sessions
 - `test-codex-adapter.mjs` — Codex CLI inventory and scope behavior
